@@ -5,17 +5,22 @@ import { LOCATION_ORDER } from "@/lib/inventory/labels";
 import type {
   InventoryActivity,
   InventoryItemView,
+  InventoryMode,
   InventorySnapshot,
   LocationType,
 } from "@/lib/inventory/types";
 import { ActivityFeed } from "./ActivityFeed";
+import { AddItemForm } from "./AddItemForm";
 import { InventoryItemRow } from "./InventoryItemRow";
 import { LocationTabs } from "./LocationTabs";
+import { SignOutButton } from "./SignOutButton";
 
 type InventoryViewProps = {
   snapshot: InventorySnapshot;
   initialItemsByLocation: Record<LocationType, InventoryItemView[]>;
   recentActivity: InventoryActivity[];
+  mode: InventoryMode;
+  showSignOut: boolean;
 };
 
 /**
@@ -26,6 +31,8 @@ export function InventoryView({
   snapshot,
   initialItemsByLocation,
   recentActivity,
+  mode,
+  showSignOut,
 }: InventoryViewProps) {
   const [active, setActive] = useState<LocationType>("fridge");
 
@@ -44,14 +51,19 @@ export function InventoryView({
   return (
     <div className="inventory-shell">
       <header className="inventory-hero">
-        <p className="inventory-kicker">Household food</p>
+        <div className="inventory-hero__top">
+          <p className="inventory-kicker">Household food</p>
+          {showSignOut ? <SignOutButton /> : null}
+        </div>
         <h1 className="inventory-brand">HomeBase</h1>
         <p className="inventory-tagline">
           What&apos;s in the {snapshot.household.name.toLowerCase()} — pantry,
           fridge and freezer in one place.
         </p>
         <p className="inventory-demo-note">
-          Sample data · not connected to Supabase yet
+          {mode === "demo"
+            ? "Sample data · Supabase not connected yet"
+            : "Live household inventory · secured by Supabase Auth + RLS"}
         </p>
       </header>
 
@@ -71,7 +83,9 @@ export function InventoryView({
         </div>
 
         {items.length === 0 ? (
-          <p className="inventory-empty">Nothing stored here yet.</p>
+          <p className="inventory-empty">
+            Nothing stored here yet. Add your first item below.
+          </p>
         ) : (
           <ul className="inventory-list">
             {items.map((item, index) => (
@@ -80,6 +94,8 @@ export function InventoryView({
           </ul>
         )}
       </section>
+
+      <AddItemForm activeLocation={active} />
 
       <section className="activity-section" aria-labelledby="activity-heading">
         <div className="inventory-panel__heading">

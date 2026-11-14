@@ -3,18 +3,16 @@ import type {
   InventoryActivity,
   InventoryItem,
   InventorySnapshot,
+  InventoryUnit,
   Location,
   LocationType,
 } from "./types";
 
 /**
- * InventoryRepository is the controlled boundary for reading inventory.
+ * InventoryRepository is the controlled boundary for inventory reads/writes.
  *
- * Today it returns sample data. Later:
- *  - a Supabase implementation will query Postgres under RLS
- *  - AI agent tools will call the same methods (never raw SQL)
- *
- * Keeping reads behind this interface is how we make agent access reliable.
+ * AI agent tools and the UI should both go through this interface — never raw
+ * SQL — so household RLS rules and activity history stay consistent.
  */
 export interface InventoryRepository {
   getSnapshot(householdId: string): Promise<InventorySnapshot | null>;
@@ -26,11 +24,25 @@ export interface InventoryRepository {
     householdId: string,
     limit?: number,
   ): Promise<InventoryActivity[]>;
+  /**
+   * Optional write path. Sample repo implements it in-memory for demos;
+   * Supabase repo persists + appends activity.
+   */
+  addItem?(input: AddInventoryItemInput): Promise<InventoryItem>;
 }
+
+export type AddInventoryItemInput = {
+  householdId: string;
+  locationType: LocationType;
+  name: string;
+  quantity: number;
+  unit: InventoryUnit;
+  expiresOn?: string | null;
+  notes?: string | null;
+};
 
 function sortForExpiryPriority(items: InventoryItem[]): InventoryItem[] {
   return [...items].sort((a, b) => {
-    // Items with an expiry date come first; sooner expiry ranks higher.
     if (a.expiresOn && b.expiresOn) {
       const byExpiry = a.expiresOn.localeCompare(b.expiresOn);
       if (byExpiry !== 0) return byExpiry;
@@ -44,7 +56,7 @@ function sortForExpiryPriority(items: InventoryItem[]): InventoryItem[] {
 }
 
 export class SampleInventoryRepository implements InventoryRepository {
-  constructor(private readonly data: InventorySnapshot = SAMPLE_INVENTORY) {}
+  private data = structuredClone(SAMPLE_INVENTORY);
 
   async getSnapshot(householdId: string): Promise<InventorySnapshot | null> {
     if (this.data.household.id !== householdId) return null;
@@ -78,13 +90,56 @@ export class SampleInventoryRepository implements InventoryRepository {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, limit);
   }
+
+  async addItem(input: AddInventoryItemInput): Promise<InventoryItem> {
+    const location = this.data.locations.find(
+      (entry) =>
+        entry.householdId === input.householdId &&
+        entry.type === input.locationType,
+    );
+    if (!location) {
+      throw new Error(`Unknown location ${input.locationType}`);
+    }
+
+    const now = new Date().toISOString();
+    const item: InventoryItem = {
+      id: `item_${crypto.randomUUID()}`,
+      householdId: input.householdId,
+      locationId: location.id,
+      name: input.name.trim(),
+      quantity: input.quantity,
+      unit: input.unit,
+      expiresOn: input.expiresOn ?? null,
+      notes: input.notes ?? null,
+      updatedAt: now,
+    };
+
+    this.data.items.push(item);
+    this.data.activity.unshift({
+      id: `act_${crypto.randomUUID()}`,
+      householdId: input.householdId,
+      itemId: item.id,
+      itemName: item.name,
+      locationType: input.locationType,
+      action: "added",
+      quantityDelta: item.quantity,
+      unit: item.unit,
+      note: "Added from HomeBase",
+      createdAt: now,
+    });
+
+    return item;
+  }
 }
 
 /** Default demo household — used until auth + real households exist. */
 export const DEMO_HOUSEHOLD_ID = SAMPLE_INVENTORY.household.id;
 
-export const inventoryRepository: InventoryRepository =
+export const sampleInventoryRepository: InventoryRepository =
   new SampleInventoryRepository();
+
+/** @deprecated Prefer getInventoryRepository() — kept for older imports. */
+export const inventoryRepository = sampleInventoryRepository;
 
 export function getLocationByType(
   locations: Location[],
@@ -92,3 +147,5 @@ export function getLocationByType(
 ): Location | undefined {
   return locations.find((location) => location.type === type);
 }
+
+export { sortForExpiryPriority };
