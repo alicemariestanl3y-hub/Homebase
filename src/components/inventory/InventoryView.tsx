@@ -89,7 +89,12 @@ export function InventoryView({
         ) : (
           <ul className="inventory-list">
             {items.map((item, index) => (
-              <InventoryItemRow key={item.id} item={item} index={index} />
+              <InventoryItemRow
+                key={item.id}
+                item={item}
+                index={index}
+                locationType={active}
+              />
             ))}
           </ul>
         )}

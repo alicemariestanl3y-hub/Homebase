@@ -24,11 +24,10 @@ export interface InventoryRepository {
     householdId: string,
     limit?: number,
   ): Promise<InventoryActivity[]>;
-  /**
-   * Optional write path. Sample repo implements it in-memory for demos;
-   * Supabase repo persists + appends activity.
-   */
-  addItem?(input: AddInventoryItemInput): Promise<InventoryItem>;
+  addItem(input: AddInventoryItemInput): Promise<InventoryItem>;
+  updateItem(input: UpdateInventoryItemInput): Promise<InventoryItem>;
+  consumeItem(input: ConsumeInventoryItemInput): Promise<InventoryItem | null>;
+  deleteItem(input: DeleteInventoryItemInput): Promise<void>;
 }
 
 export type AddInventoryItemInput = {
@@ -39,6 +38,31 @@ export type AddInventoryItemInput = {
   unit: InventoryUnit;
   expiresOn?: string | null;
   notes?: string | null;
+};
+
+export type UpdateInventoryItemInput = {
+  householdId: string;
+  itemId: string;
+  name: string;
+  quantity: number;
+  unit: InventoryUnit;
+  locationType: LocationType;
+  expiresOn?: string | null;
+  notes?: string | null;
+};
+
+export type ConsumeInventoryItemInput = {
+  householdId: string;
+  itemId: string;
+  /** Amount to use/consume; must be > 0. */
+  amount: number;
+  note?: string | null;
+};
+
+export type DeleteInventoryItemInput = {
+  householdId: string;
+  itemId: string;
+  note?: string | null;
 };
 
 function sortForExpiryPriority(items: InventoryItem[]): InventoryItem[] {
@@ -53,6 +77,15 @@ function sortForExpiryPriority(items: InventoryItem[]): InventoryItem[] {
     }
     return a.name.localeCompare(b.name);
   });
+}
+
+function findLocationType(
+  data: InventorySnapshot,
+  locationId: string,
+): LocationType {
+  const location = data.locations.find((entry) => entry.id === locationId);
+  if (!location) throw new Error("Location not found for item.");
+  return location.type;
 }
 
 export class SampleInventoryRepository implements InventoryRepository {
@@ -129,6 +162,123 @@ export class SampleInventoryRepository implements InventoryRepository {
     });
 
     return item;
+  }
+
+  async updateItem(input: UpdateInventoryItemInput): Promise<InventoryItem> {
+    const index = this.data.items.findIndex(
+      (item) =>
+        item.id === input.itemId && item.householdId === input.householdId,
+    );
+    if (index < 0) throw new Error("Item not found.");
+
+    const location = this.data.locations.find(
+      (entry) =>
+        entry.householdId === input.householdId &&
+        entry.type === input.locationType,
+    );
+    if (!location) throw new Error(`Unknown location ${input.locationType}`);
+
+    const existing = this.data.items[index];
+    const now = new Date().toISOString();
+    const updated: InventoryItem = {
+      ...existing,
+      locationId: location.id,
+      name: input.name.trim(),
+      quantity: input.quantity,
+      unit: input.unit,
+      expiresOn: input.expiresOn ?? null,
+      notes: input.notes ?? null,
+      updatedAt: now,
+    };
+
+    this.data.items[index] = updated;
+    this.data.activity.unshift({
+      id: `act_${crypto.randomUUID()}`,
+      householdId: input.householdId,
+      itemId: updated.id,
+      itemName: updated.name,
+      locationType: input.locationType,
+      action: "adjusted",
+      quantityDelta: updated.quantity - existing.quantity,
+      unit: updated.unit,
+      note: "Edited from HomeBase",
+      createdAt: now,
+    });
+
+    return updated;
+  }
+
+  async consumeItem(
+    input: ConsumeInventoryItemInput,
+  ): Promise<InventoryItem | null> {
+    const index = this.data.items.findIndex(
+      (item) =>
+        item.id === input.itemId && item.householdId === input.householdId,
+    );
+    if (index < 0) throw new Error("Item not found.");
+    if (input.amount <= 0) throw new Error("Consume amount must be positive.");
+
+    const existing = this.data.items[index];
+    if (input.amount > existing.quantity) {
+      throw new Error("Cannot use more than the quantity on hand.");
+    }
+
+    const now = new Date().toISOString();
+    const locationType = findLocationType(this.data, existing.locationId);
+    const remaining = existing.quantity - input.amount;
+
+    this.data.activity.unshift({
+      id: `act_${crypto.randomUUID()}`,
+      householdId: input.householdId,
+      itemId: existing.id,
+      itemName: existing.name,
+      locationType,
+      action: "consumed",
+      quantityDelta: -input.amount,
+      unit: existing.unit,
+      note: input.note?.trim() || "Used from HomeBase",
+      createdAt: now,
+    });
+
+    if (remaining <= 0) {
+      this.data.items.splice(index, 1);
+      return null;
+    }
+
+    const updated: InventoryItem = {
+      ...existing,
+      quantity: remaining,
+      updatedAt: now,
+    };
+    this.data.items[index] = updated;
+    return updated;
+  }
+
+  async deleteItem(input: DeleteInventoryItemInput): Promise<void> {
+    const index = this.data.items.findIndex(
+      (item) =>
+        item.id === input.itemId && item.householdId === input.householdId,
+    );
+    if (index < 0) throw new Error("Item not found.");
+
+    const existing = this.data.items[index];
+    const now = new Date().toISOString();
+    const locationType = findLocationType(this.data, existing.locationId);
+
+    this.data.activity.unshift({
+      id: `act_${crypto.randomUUID()}`,
+      householdId: input.householdId,
+      itemId: existing.id,
+      itemName: existing.name,
+      locationType,
+      action: "adjusted",
+      quantityDelta: -existing.quantity,
+      unit: existing.unit,
+      note: input.note?.trim() || "Removed from HomeBase",
+      createdAt: now,
+    });
+
+    this.data.items.splice(index, 1);
   }
 }
 

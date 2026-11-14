@@ -266,6 +266,48 @@ a {
   color: var(--hb-muted);
 }
 
+.inventory-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.45rem;
+}
+
+.row-action {
+  border: 0;
+  background: transparent;
+  color: var(--hb-brand);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.row-action--primary {
+  color: var(--hb-brand);
+}
+
+.row-action--danger {
+  color: var(--hb-danger);
+}
+
+.row-action:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.item-inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--hb-line);
+}
+
 .inventory-empty,
 .activity-empty {
   margin: 1rem 0 0;

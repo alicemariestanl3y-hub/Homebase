@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import {
   addInventoryItem,
-  type AddItemState,
+  type MutationState,
 } from "@/app/actions/inventory";
 import { LOCATION_LABELS, LOCATION_ORDER } from "@/lib/inventory/labels";
 import { INVENTORY_UNITS, UNIT_LABELS } from "@/lib/inventory/units";
@@ -13,7 +13,7 @@ type AddItemFormProps = {
   activeLocation: LocationType;
 };
 
-const initialState: AddItemState = { error: null, ok: false };
+const initialState: MutationState = { error: null, ok: false };
 
 export function AddItemForm({ activeLocation }: AddItemFormProps) {
   const [state, formAction, pending] = useActionState(
