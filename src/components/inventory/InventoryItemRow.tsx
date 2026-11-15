@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   consumeInventoryItem,
   deleteInventoryItem,
@@ -8,7 +8,11 @@ import {
   type MutationState,
 } from "@/app/actions/inventory";
 import { LOCATION_LABELS, LOCATION_ORDER } from "@/lib/inventory/labels";
-import { formatQuantity, INVENTORY_UNITS, UNIT_LABELS } from "@/lib/inventory/units";
+import {
+  formatQuantity,
+  INVENTORY_UNITS,
+  UNIT_LABELS,
+} from "@/lib/inventory/units";
 import type { InventoryItemView, LocationType } from "@/lib/inventory/types";
 
 type InventoryItemRowProps = {
@@ -25,6 +29,8 @@ export function InventoryItemRow({
   locationType,
 }: InventoryItemRowProps) {
   const [mode, setMode] = useState<"view" | "edit" | "use">("view");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [updateState, updateAction, updatePending] = useActionState(
     updateInventoryItem,
     initialState,
@@ -38,54 +44,91 @@ export function InventoryItemRow({
     initialState,
   );
 
+  useEffect(() => {
+    function onDocClick(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, []);
+
   return (
     <li
-      className={`inventory-row inventory-row--${item.urgency}`}
-      style={{ animationDelay: `${index * 45}ms` }}
+      className="hb-item-row"
+      style={{ animationDelay: `${index * 40}ms` }}
     >
-      <div className="inventory-row__main">
-        <h3 className="inventory-row__name">{item.name}</h3>
-        <p className="inventory-row__qty">
+      <div className={`hb-item-thumb hb-item-thumb--${locationType}`}>
+        {LOCATION_LABELS[locationType].slice(0, 3)}
+      </div>
+
+      <div>
+        <h3 className="hb-item-name">{item.name}</h3>
+        <div className="hb-item-meta">
+          {item.expiryLabel ? (
+            <span className={`hb-item-meta--${item.urgency}`}>
+              {formatExpiryShort(item.expiryLabel, item.urgency)}
+            </span>
+          ) : (
+            <span>No expiry set</span>
+          )}
+          <span className="hb-pill">{LOCATION_LABELS[locationType]}</span>
+        </div>
+      </div>
+
+      <div className="hb-item-actions" ref={menuRef}>
+        <p className="hb-item-qty">
           {formatQuantity(item.quantity, item.unit)}
         </p>
-      </div>
-      {item.expiryLabel ? (
-        <p
-          className={`inventory-row__expiry inventory-row__expiry--${item.urgency}`}
+        <button
+          type="button"
+          className="hb-kebab"
+          aria-label={`Actions for ${item.name}`}
+          aria-expanded={menuOpen}
+          onClick={(event) => {
+            event.stopPropagation();
+            setMenuOpen((open) => !open);
+          }}
         >
-          {item.expiryLabel}
-        </p>
-      ) : null}
-      {item.notes ? <p className="inventory-row__notes">{item.notes}</p> : null}
-
-      {mode === "view" ? (
-        <div className="inventory-row__actions">
-          <button
-            type="button"
-            className="row-action"
-            onClick={() => setMode("use")}
-          >
-            Use
-          </button>
-          <button
-            type="button"
-            className="row-action"
-            onClick={() => setMode("edit")}
-          >
-            Edit
-          </button>
-          <form action={deleteAction}>
-            <input type="hidden" name="itemId" value={item.id} />
+          ···
+        </button>
+        {menuOpen ? (
+          <div className="hb-menu" role="menu">
             <button
-              type="submit"
-              className="row-action row-action--danger"
-              disabled={deletePending}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMode("use");
+                setMenuOpen(false);
+              }}
             >
-              {deletePending ? "Removing…" : "Remove"}
+              Use
             </button>
-          </form>
-        </div>
-      ) : null}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMode("edit");
+                setMenuOpen(false);
+              }}
+            >
+              Edit
+            </button>
+            <form action={deleteAction}>
+              <input type="hidden" name="itemId" value={item.id} />
+              <button
+                type="submit"
+                className="danger"
+                role="menuitem"
+                disabled={deletePending}
+              >
+                {deletePending ? "Removing…" : "Remove"}
+              </button>
+            </form>
+          </div>
+        ) : null}
+      </div>
 
       {mode === "use" ? (
         <form className="item-inline-form" action={consumeAction}>
@@ -103,26 +146,14 @@ export function InventoryItemRow({
               defaultValue={Math.min(1, item.quantity)}
             />
           </label>
-          <label className="auth-field">
-            <span>Note (optional)</span>
-            <input name="note" type="text" placeholder="Dinner" />
-          </label>
           {consumeState.error ? (
             <p className="auth-error">{consumeState.error}</p>
           ) : null}
           <div className="inventory-row__actions">
-            <button
-              type="submit"
-              className="row-action row-action--primary"
-              disabled={consumePending}
-            >
+            <button type="submit" className="row-action" disabled={consumePending}>
               {consumePending ? "Saving…" : "Confirm use"}
             </button>
-            <button
-              type="button"
-              className="row-action"
-              onClick={() => setMode("view")}
-            >
+            <button type="button" className="row-action" onClick={() => setMode("view")}>
               Cancel
             </button>
           </div>
@@ -172,45 +203,37 @@ export function InventoryItemRow({
           </label>
           <label className="auth-field">
             <span>Expiry (optional)</span>
-            <input
-              name="expiresOn"
-              type="date"
-              defaultValue={item.expiresOn ?? ""}
-            />
+            <input name="expiresOn" type="date" defaultValue={item.expiresOn ?? ""} />
           </label>
           <label className="auth-field">
             <span>Notes (optional)</span>
-            <input
-              name="notes"
-              type="text"
-              defaultValue={item.notes ?? ""}
-            />
+            <input name="notes" type="text" defaultValue={item.notes ?? ""} />
           </label>
           {updateState.error ? (
             <p className="auth-error">{updateState.error}</p>
           ) : null}
           <div className="inventory-row__actions">
-            <button
-              type="submit"
-              className="row-action row-action--primary"
-              disabled={updatePending}
-            >
+            <button type="submit" className="row-action" disabled={updatePending}>
               {updatePending ? "Saving…" : "Save"}
             </button>
-            <button
-              type="button"
-              className="row-action"
-              onClick={() => setMode("view")}
-            >
+            <button type="button" className="row-action" onClick={() => setMode("view")}>
               Cancel
             </button>
           </div>
         </form>
       ) : null}
 
-      {deleteState.error ? (
-        <p className="auth-error">{deleteState.error}</p>
-      ) : null}
+      {deleteState.error ? <p className="auth-error">{deleteState.error}</p> : null}
     </li>
   );
+}
+
+function formatExpiryShort(
+  label: string,
+  urgency: InventoryItemView["urgency"],
+): string {
+  if (urgency === "expired") return label;
+  if (urgency === "soon") return label;
+  if (label.startsWith("Expires ")) return label.replace("Expires ", "Good until ");
+  return label;
 }

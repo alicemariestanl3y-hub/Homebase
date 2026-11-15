@@ -1,20 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Figtree, Fraunces, Geist_Mono } from "next/font/google";
+import { Literata, Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  axes: ["SOFT", "WONK", "opsz"],
-});
-
-const figtree = Figtree({
-  variable: "--font-figtree",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin"],
+});
+
+const literata = Literata({
+  variable: "--font-literata",
   subsets: ["latin"],
 });
 
@@ -27,14 +26,15 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0f5c4c",
+  themeColor: "#1f3d2f",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en-AU"
-      className={`${fraunces.variable} ${figtree.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${spaceGrotesk.variable} ${manrope.variable} ${literata.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>

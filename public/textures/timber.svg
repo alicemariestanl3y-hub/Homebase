@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3a2416"/>
+      <stop offset="45%" stop-color="#5a3a24"/>
+      <stop offset="100%" stop-color="#2c1a10"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" fill="url(#g)"/>
+  <g stroke="#1a100a" stroke-opacity="0.28" fill="none">
+    <path d="M0 18 C40 10,80 28,120 16 S200 8,240 20"/>
+    <path d="M0 48 C50 40,90 58,140 46 S210 38,240 52"/>
+    <path d="M0 78 C35 70,95 88,145 76 S205 68,240 82"/>
+    <path d="M0 108 C55 98,100 118,155 106 S215 98,240 112"/>
+    <path d="M0 138 C40 130,85 148,140 136 S205 128,240 142"/>
+    <path d="M0 168 C60 158,105 178,160 166 S220 158,240 172"/>
+    <path d="M0 198 C45 190,95 208,150 196 S210 188,240 202"/>
+    <path d="M0 228 C50 220,100 238,155 226 S215 218,240 232"/>
+  </g>
+  <g stroke="#c4a484" stroke-opacity="0.08" fill="none">
+    <path d="M0 30 C60 22,120 40,180 28 S230 24,240 34"/>
+    <path d="M0 120 C70 110,130 130,190 118 S235 114,240 124"/>
+    <path d="M0 210 C65 200,125 220,185 208 S235 204,240 214"/>
+  </g>
+</svg>

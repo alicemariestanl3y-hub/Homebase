@@ -1,15 +1,9 @@
 /**
- * Supabase connection settings.
+ * Supabase connection settings (server-only names).
  *
- * Use the Project URL + publishable/anon key only.
+ * Use Project URL + publishable/anon key only.
  * Never put the secret service-role key in the app or in git.
- *
- * Accepted names (first match wins):
- * - SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL
- * - SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY /
- *   NEXT_PUBLIC_SUPABASE_ANON_KEY / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
- *
- * Auth + data access stay on the server (RSC / Server Actions) with RLS.
+ * Do not use NEXT_PUBLIC_* aliases — those would ship to the browser.
  */
 export type SupabaseEnv = {
   url: string;
@@ -33,14 +27,10 @@ function normalizeUrl(raw: string): string | null {
 }
 
 export function getSupabaseEnv(): SupabaseEnv | null {
-  const rawUrl =
-    clean(process.env.SUPABASE_URL) ||
-    clean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const rawUrl = clean(process.env.SUPABASE_URL);
   const anonKey =
     clean(process.env.SUPABASE_ANON_KEY) ||
-    clean(process.env.SUPABASE_PUBLISHABLE_KEY) ||
-    clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ||
-    clean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+    clean(process.env.SUPABASE_PUBLISHABLE_KEY);
 
   if (!rawUrl || !anonKey) return null;
 
@@ -65,4 +55,8 @@ export function getSupabasePublicStatus() {
   } catch {
     return { configured: false as const, host: null };
   }
+}
+
+export function getOpenAiApiKey(): string | null {
+  return clean(process.env.OPENAI_API_KEY);
 }
