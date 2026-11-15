@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { signIn } from "@/app/actions/auth";
 import { AuthForm } from "@/components/auth/AuthForm";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -8,6 +9,9 @@ type LoginContentProps = {
 };
 
 async function LoginContent({ searchParams }: LoginContentProps) {
+  // Secrets exist only at request time on the published host — never decide
+  // configured/demo from the build-time prerender.
+  await connection();
   const configured = isSupabaseConfigured();
   const params = await searchParams;
   const configError =
@@ -22,9 +26,9 @@ async function LoginContent({ searchParams }: LoginContentProps) {
 
       {configError ? (
         <p className="auth-error">
-          Couldn’t reach Supabase with the configured URL/key. Confirm
-          SUPABASE_URL is the Project URL and SUPABASE_ANON_KEY is the
-          publishable/anon key (not the secret service-role key).
+          Couldn’t reach your household database. Check that the Project URL
+          and publishable key in App Secrets match your Supabase project, then
+          try again.
         </p>
       ) : null}
 
@@ -32,8 +36,9 @@ async function LoginContent({ searchParams }: LoginContentProps) {
         <AuthForm mode="login" action={signIn} />
       ) : (
         <p className="auth-error">
-          Supabase is not connected yet. Add SUPABASE_URL and
-          SUPABASE_ANON_KEY, then refresh.
+          HomeBase can’t see your household database yet. Open Cursor → App
+          Secrets, confirm SUPABASE_URL and SUPABASE_ANON_KEY are saved, then
+          pull to refresh this page.
         </p>
       )}
     </div>
