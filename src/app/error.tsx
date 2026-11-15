@@ -13,8 +13,8 @@ export default function AppError({
         <p className="inventory-kicker">HomeBase</p>
         <h1 className="inventory-brand">Something went wrong</h1>
         <p className="auth-lead">
-          The app hit a server error while loading. This is often a Supabase
-          connection or auth configuration issue.
+          The app hit an unexpected error while loading. Tap try again. If it
+          keeps happening, sign out from Account and sign back in.
         </p>
         {error?.digest ? (
           <p className="inventory-demo-note">Error id: {error.digest}</p>

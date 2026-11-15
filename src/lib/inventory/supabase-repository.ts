@@ -374,20 +374,28 @@ async function requireLocationTypeForItem(
 
 /** Resolve the caller's first household (v1: one household per user). */
 export async function getCurrentHouseholdId(): Promise<string | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) return null;
 
-  const { data, error } = await supabase
-    .from("household_members")
-    .select("household_id")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    const { data, error } = await supabase
+      .from("household_members")
+      .select("household_id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-  if (error) throw error;
-  return data?.household_id ?? null;
+    if (error) throw error;
+    return data?.household_id ?? null;
+  } catch (error) {
+    // Surface as a soft miss so page loaders can show a friendly empty state
+    // instead of an unhandled 500 when auth/session is briefly unavailable.
+    if (error && typeof error === "object" && "code" in error) throw error;
+    return null;
+  }
 }
