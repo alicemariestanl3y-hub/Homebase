@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AppHeader } from "./AppHeader";
 import { BottomNav } from "./BottomNav";
 
@@ -19,7 +20,15 @@ export function AppShell({
       <AppHeader showSignOut={showSignOut} />
       {hero}
       <div className="hb-app__body">{children}</div>
-      {showBottomNav ? <BottomNav /> : null}
+      {showBottomNav ? (
+        <Suspense
+          fallback={
+            <nav className="hb-bottom-nav" aria-hidden="true" />
+          }
+        >
+          <BottomNav />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

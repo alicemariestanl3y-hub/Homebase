@@ -20,19 +20,24 @@ export type SaveCaptureState = {
 };
 
 async function requireCaptureAccess(): Promise<{ error: string | null }> {
+  // Live apps always have Supabase configured — require a signed-in user.
+  // Demo mode (no secrets) stays open for local sample testing only.
   if (!isSupabaseConfigured()) {
-    // Demo mode is allowed for local/sample testing only.
     return { error: null };
   }
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user) {
+      return { error: "Sign in to save captured items." };
+    }
+    return { error: null };
+  } catch {
     return { error: "Sign in to save captured items." };
   }
-  return { error: null };
 }
 
 export async function saveCapturedItems(
