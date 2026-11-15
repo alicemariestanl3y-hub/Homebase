@@ -9,7 +9,27 @@ import {
   getInventoryRepository,
 } from "@/lib/inventory/get-repository";
 import { getCurrentHouseholdId } from "@/lib/inventory/supabase-repository";
-import type { InventoryItemView, LocationType } from "@/lib/inventory/types";
+import type {
+  InventoryActivity,
+  InventoryItemView,
+  InventoryMode,
+  InventorySnapshot,
+  LocationType,
+} from "@/lib/inventory/types";
+
+type LoadedInventory = {
+  kind: "ok";
+  snapshot: InventorySnapshot;
+  initialItemsByLocation: Record<LocationType, InventoryItemView[]>;
+  recentActivity: InventoryActivity[];
+  mode: InventoryMode;
+};
+
+type LoadedState =
+  | LoadedInventory
+  | { kind: "no-household" }
+  | { kind: "no-snapshot" }
+  | { kind: "error"; message: string };
 
 /**
  * Request-time inventory loader.
@@ -17,16 +37,57 @@ import type { InventoryItemView, LocationType } from "@/lib/inventory/types";
  * `await connection()` opts this subtree into dynamic rendering so expiry
  * labels can use the real current time under Next.js Cache Components.
  */
-async function InventoryPageContent() {
+async function loadInventory(): Promise<LoadedState> {
   await connection();
 
-  const mode = getInventoryMode();
-  const repo = getInventoryRepository();
+  try {
+    const mode = getInventoryMode();
+    const repo = getInventoryRepository();
 
-  const householdId =
-    mode === "live" ? await getCurrentHouseholdId() : getDemoHouseholdId();
+    const householdId =
+      mode === "live" ? await getCurrentHouseholdId() : getDemoHouseholdId();
 
-  if (!householdId) {
+    if (!householdId) {
+      return { kind: "no-household" };
+    }
+
+    const snapshot = await repo.getSnapshot(householdId);
+
+    if (!snapshot) {
+      return { kind: "no-snapshot" };
+    }
+
+    const now = new Date();
+    const initialItemsByLocation = {} as Record<
+      LocationType,
+      InventoryItemView[]
+    >;
+
+    for (const location of LOCATION_ORDER) {
+      const items = await repo.listItemsByLocation(householdId, location);
+      initialItemsByLocation[location] = toItemViews(items, now);
+    }
+
+    const recentActivity = await repo.listRecentActivity(householdId);
+
+    return {
+      kind: "ok",
+      snapshot,
+      initialItemsByLocation,
+      recentActivity,
+      mode,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown inventory error";
+    return { kind: "error", message };
+  }
+}
+
+async function InventoryPageContent() {
+  const state = await loadInventory();
+
+  if (state.kind === "no-household") {
     return (
       <p className="inventory-empty">
         No household is linked to your account yet. Sign out and sign up again,
@@ -35,29 +96,31 @@ async function InventoryPageContent() {
     );
   }
 
-  const snapshot = await repo.getSnapshot(householdId);
-
-  if (!snapshot) {
+  if (state.kind === "no-snapshot") {
     return <p className="inventory-empty">No household inventory found.</p>;
   }
 
-  const now = new Date();
-  const initialItemsByLocation = {} as Record<LocationType, InventoryItemView[]>;
-
-  for (const location of LOCATION_ORDER) {
-    const items = await repo.listItemsByLocation(householdId, location);
-    initialItemsByLocation[location] = toItemViews(items, now);
+  if (state.kind === "error") {
+    return (
+      <div className="auth-card">
+        <p className="inventory-kicker">HomeBase</p>
+        <h2 className="add-item-form__title">Couldn’t load inventory</h2>
+        <p className="auth-error">{state.message}</p>
+        <p className="inventory-demo-note">
+          Check that SUPABASE_URL is your Project URL and SUPABASE_ANON_KEY is
+          the publishable/anon key (not the secret service-role key).
+        </p>
+      </div>
+    );
   }
-
-  const recentActivity = await repo.listRecentActivity(householdId);
 
   return (
     <InventoryView
-      snapshot={snapshot}
-      initialItemsByLocation={initialItemsByLocation}
-      recentActivity={recentActivity}
-      mode={mode}
-      showSignOut={mode === "live"}
+      snapshot={state.snapshot}
+      initialItemsByLocation={state.initialItemsByLocation}
+      recentActivity={state.recentActivity}
+      mode={state.mode}
+      showSignOut={state.mode === "live"}
     />
   );
 }
