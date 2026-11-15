@@ -9,7 +9,7 @@ export default function SignupPage() {
     <main className="auth-page">
       <div className="auth-card">
         <p className="inventory-kicker">Household food</p>
-        <h1 className="inventory-brand">HomeBase</h1>
+        <h1 className="inventory-brand">HOMEBASE</h1>
         <p className="auth-lead">
           Create an account. We&apos;ll set up your pantry, fridge and freezer.
         </p>

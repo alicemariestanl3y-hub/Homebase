@@ -17,7 +17,7 @@ async function LoginContent({ searchParams }: LoginContentProps) {
   return (
     <div className="auth-card">
       <p className="inventory-kicker">Household food</p>
-      <h1 className="inventory-brand">HomeBase</h1>
+      <h1 className="inventory-brand">HOMEBASE</h1>
       <p className="auth-lead">Sign in to your household inventory.</p>
 
       {configError ? (
@@ -51,7 +51,7 @@ export default function LoginPage({
         fallback={
           <div className="auth-card">
             <p className="inventory-kicker">Household food</p>
-            <h1 className="inventory-brand">HomeBase</h1>
+            <h1 className="inventory-brand">HOMEBASE</h1>
             <p className="auth-lead">Loading…</p>
           </div>
         }

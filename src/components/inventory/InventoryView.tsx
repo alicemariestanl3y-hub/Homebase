@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { LOCATION_ORDER } from "@/lib/inventory/labels";
 import type {
@@ -13,28 +14,22 @@ import { ActivityFeed } from "./ActivityFeed";
 import { AddItemForm } from "./AddItemForm";
 import { InventoryItemRow } from "./InventoryItemRow";
 import { LocationTabs } from "./LocationTabs";
-import { SignOutButton } from "./SignOutButton";
 
 type InventoryViewProps = {
   snapshot: InventorySnapshot;
   initialItemsByLocation: Record<LocationType, InventoryItemView[]>;
   recentActivity: InventoryActivity[];
   mode: InventoryMode;
-  showSignOut: boolean;
 };
 
-/**
- * Client shell for tab switching. Data is loaded on the server and passed in,
- * so the first paint already has inventory — we only hydrate interactivity.
- */
 export function InventoryView({
   snapshot,
   initialItemsByLocation,
   recentActivity,
   mode,
-  showSignOut,
 }: InventoryViewProps) {
   const [active, setActive] = useState<LocationType>("fridge");
+  const [showManualAdd, setShowManualAdd] = useState(false);
 
   const counts = useMemo(() => {
     return LOCATION_ORDER.reduce(
@@ -49,23 +44,14 @@ export function InventoryView({
   const items = initialItemsByLocation[active];
 
   return (
-    <div className="inventory-shell">
-      <header className="inventory-hero">
-        <div className="inventory-hero__top">
-          <p className="inventory-kicker">Household food</p>
-          {showSignOut ? <SignOutButton /> : null}
-        </div>
-        <h1 className="inventory-brand">HomeBase</h1>
-        <p className="inventory-tagline">
-          What&apos;s in the {snapshot.household.name.toLowerCase()} — pantry,
-          fridge and freezer in one place.
-        </p>
-        <p className="inventory-demo-note">
-          {mode === "demo"
-            ? "Sample data · Supabase not connected yet"
-            : "Live household inventory · secured by Supabase Auth + RLS"}
-        </p>
-      </header>
+    <>
+      {mode === "demo" ? (
+        <p className="demo-banner">Sample data · connect Supabase for live inventory</p>
+      ) : null}
+
+      <p className="hb-kicker" style={{ marginBottom: "0.35rem" }}>
+        {snapshot.household.name}
+      </p>
 
       <LocationTabs active={active} counts={counts} onChange={setActive} />
 
@@ -75,19 +61,19 @@ export function InventoryView({
         id={`panel-${active}`}
         aria-labelledby={`tab-${active}`}
       >
-        <div className="inventory-panel__heading">
+        <div className="hb-panel-head">
           <h2>
             {items.length} item{items.length === 1 ? "" : "s"}
           </h2>
-          <p>Sorted so soon-to-expire ingredients surface first.</p>
+          <p className="hb-panel-meta">Soonest to expire</p>
         </div>
 
         {items.length === 0 ? (
-          <p className="inventory-empty">
-            Nothing stored here yet. Add your first item below.
+          <p className="hb-empty">
+            Nothing here yet. Capture a shelf photo or add an item manually.
           </p>
         ) : (
-          <ul className="inventory-list">
+          <ul className="hb-inventory-list">
             {items.map((item, index) => (
               <InventoryItemRow
                 key={item.id}
@@ -100,18 +86,29 @@ export function InventoryView({
         )}
       </section>
 
-      <AddItemForm activeLocation={active} />
+      <div className="manual-add">
+        <button
+          type="button"
+          className="hb-btn hb-btn--ghost"
+          onClick={() => setShowManualAdd((value) => !value)}
+        >
+          {showManualAdd ? "Hide manual add" : "Add item manually"}
+        </button>
+        {showManualAdd ? <AddItemForm activeLocation={active} /> : null}
+      </div>
 
       <section className="activity-section" aria-labelledby="activity-heading">
-        <div className="inventory-panel__heading">
-          <h2 id="activity-heading">Recent activity</h2>
-          <p>
-            Adds, uses and adjustments — the trail a future agent will also
-            write to.
-          </p>
-        </div>
+        <h2 id="activity-heading" className="section-title">
+          Recent activity
+        </h2>
         <ActivityFeed activity={recentActivity} />
       </section>
-    </div>
+
+      <Link href="/capture" className="hb-fab" aria-label="Add items with camera">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        </svg>
+      </Link>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { InventoryView } from "@/components/inventory/InventoryView";
+import { AppShell } from "@/components/layout/AppShell";
 import { LOCATION_ORDER } from "@/lib/inventory/labels";
 import { toItemViews } from "@/lib/inventory/present";
 import {
@@ -31,31 +32,19 @@ type LoadedState =
   | { kind: "no-snapshot" }
   | { kind: "error"; message: string };
 
-/**
- * Request-time inventory loader.
- *
- * `await connection()` opts this subtree into dynamic rendering so expiry
- * labels can use the real current time under Next.js Cache Components.
- */
 async function loadInventory(): Promise<LoadedState> {
   await connection();
 
   try {
     const mode = getInventoryMode();
     const repo = getInventoryRepository();
-
     const householdId =
       mode === "live" ? await getCurrentHouseholdId() : getDemoHouseholdId();
 
-    if (!householdId) {
-      return { kind: "no-household" };
-    }
+    if (!householdId) return { kind: "no-household" };
 
     const snapshot = await repo.getSnapshot(householdId);
-
-    if (!snapshot) {
-      return { kind: "no-snapshot" };
-    }
+    if (!snapshot) return { kind: "no-snapshot" };
 
     const now = new Date();
     const initialItemsByLocation = {} as Record<
@@ -86,67 +75,80 @@ async function loadInventory(): Promise<LoadedState> {
 
 async function InventoryPageContent() {
   const state = await loadInventory();
+  const mode = getInventoryMode();
+
+  const hero = (
+    <section className="hb-hero">
+      <p className="hb-hero__kicker">— Household food —</p>
+      <h1 className="hb-hero__title">What&apos;s in the kitchen</h1>
+      <p className="hb-hero__sub">
+        Pantry, fridge and freezer in one place.
+      </p>
+    </section>
+  );
 
   if (state.kind === "no-household") {
     return (
-      <p className="inventory-empty">
-        No household is linked to your account yet. Sign out and sign up again,
-        or check that the Supabase migration ran.
-      </p>
+      <AppShell showSignOut={mode === "live"} hero={hero}>
+        <p className="hb-empty">
+          No household is linked to your account yet. Sign out and sign up
+          again, or check that the Supabase migration ran.
+        </p>
+      </AppShell>
     );
   }
 
   if (state.kind === "no-snapshot") {
-    return <p className="inventory-empty">No household inventory found.</p>;
+    return (
+      <AppShell showSignOut={mode === "live"} hero={hero}>
+        <p className="hb-empty">No household inventory found.</p>
+      </AppShell>
+    );
   }
 
   if (state.kind === "error") {
     return (
-      <div className="auth-card">
-        <p className="inventory-kicker">HomeBase</p>
-        <h2 className="add-item-form__title">Couldn’t load inventory</h2>
-        <p className="auth-error">{state.message}</p>
-        <p className="inventory-demo-note">
-          Check that SUPABASE_URL is your Project URL and SUPABASE_ANON_KEY is
-          the publishable/anon key (not the secret service-role key).
-        </p>
-      </div>
+      <AppShell showSignOut={mode === "live"} hero={hero}>
+        <div className="auth-card" style={{ boxShadow: "none" }}>
+          <h2 className="section-title">Couldn’t load inventory</h2>
+          <p className="auth-error">{state.message}</p>
+        </div>
+      </AppShell>
     );
   }
 
   return (
-    <InventoryView
-      snapshot={state.snapshot}
-      initialItemsByLocation={state.initialItemsByLocation}
-      recentActivity={state.recentActivity}
-      mode={state.mode}
-      showSignOut={state.mode === "live"}
-    />
+    <AppShell showSignOut={state.mode === "live"} hero={hero}>
+      <InventoryView
+        snapshot={state.snapshot}
+        initialItemsByLocation={state.initialItemsByLocation}
+        recentActivity={state.recentActivity}
+        mode={state.mode}
+      />
+    </AppShell>
   );
 }
 
 function InventoryFallback() {
   return (
-    <div className="inventory-shell" aria-busy="true">
-      <header className="inventory-hero">
-        <p className="inventory-kicker">Household food</p>
-        <h1 className="inventory-brand">HomeBase</h1>
-        <p className="inventory-tagline">Loading your inventory…</p>
-      </header>
-    </div>
+    <AppShell
+      hero={
+        <section className="hb-hero">
+          <p className="hb-hero__kicker">— Household food —</p>
+          <h1 className="hb-hero__title">What&apos;s in the kitchen</h1>
+          <p className="hb-hero__sub">Loading your inventory…</p>
+        </section>
+      }
+    >
+      <p className="hb-empty">Loading…</p>
+    </AppShell>
   );
 }
 
-/**
- * Home / inventory page (Server Component).
- * Switches between sample data and live Supabase via getInventoryRepository().
- */
 export default function HomePage() {
   return (
-    <main className="inventory-page">
-      <Suspense fallback={<InventoryFallback />}>
-        <InventoryPageContent />
-      </Suspense>
-    </main>
+    <Suspense fallback={<InventoryFallback />}>
+      <InventoryPageContent />
+    </Suspense>
   );
 }
