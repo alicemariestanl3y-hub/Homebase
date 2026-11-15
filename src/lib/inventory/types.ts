@@ -86,3 +86,6 @@ export type InventoryItemView = InventoryItem & {
   expiryLabel: string | null;
   urgency: "expired" | "soon" | "ok" | "none";
 };
+
+/** demo = sample data; live = Supabase + Auth. */
+export type InventoryMode = "live" | "demo";
