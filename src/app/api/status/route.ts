@@ -19,6 +19,5 @@ export async function GET() {
     hasAnonKey: supabase.hasAnonKey,
     urlOk: supabase.urlOk,
     keyLooksLikeJwt: supabase.keyLooksLikeJwt,
-    relatedEnvNames: supabase.relatedEnvNames,
   });
 }

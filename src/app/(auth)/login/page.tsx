@@ -59,9 +59,6 @@ async function LoginContent({ searchParams }: LoginContentProps) {
                 : " (too short)"
               : ""}
             .
-            {diagnosis.relatedEnvNames.length > 0
-              ? ` Env names seen: ${diagnosis.relatedEnvNames.join(", ")}.`
-              : " No SUPABASE_* env names are visible to this server."}
           </p>
         </>
       )}
