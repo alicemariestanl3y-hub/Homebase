@@ -1,20 +1,26 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * Ensure the signed-in user has a household (+ locations).
  * Prefers the DB RPC (security definer). Falls back to reading membership.
+ *
+ * Pass the same Supabase client that just signed the user in — cookies set
+ * via cookies().set() in this request are not always visible to a fresh
+ * createClient()/getAll() yet.
  */
 export async function ensureHouseholdForCurrentUser(
   householdName = "My Kitchen",
+  existingClient?: SupabaseClient,
 ): Promise<{ householdId: string | null; error: string | null }> {
   try {
-    const supabase = await createClient();
+    const supabase = existingClient ?? (await createClient());
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError || !user) {
+    if (userError || !user?.id) {
       return { householdId: null, error: "You must be signed in." };
     }
 
