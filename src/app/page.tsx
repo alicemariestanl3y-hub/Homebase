@@ -4,6 +4,7 @@ import { InventoryView } from "@/components/inventory/InventoryView";
 import { AppShell } from "@/components/layout/AppShell";
 import { LOCATION_ORDER } from "@/lib/inventory/labels";
 import { toItemViews } from "@/lib/inventory/present";
+import { ensureHouseholdForCurrentUser } from "@/lib/inventory/ensure-household";
 import {
   getDemoHouseholdId,
   getInventoryMode,
@@ -38,8 +39,22 @@ async function loadInventory(): Promise<LoadedState> {
   try {
     const mode = getInventoryMode();
     const repo = getInventoryRepository();
-    const householdId =
+    let householdId =
       mode === "live" ? await getCurrentHouseholdId() : getDemoHouseholdId();
+
+    // Live accounts should always get a household (RPC + trigger fallback).
+    if (mode === "live" && !householdId) {
+      const ensured = await ensureHouseholdForCurrentUser();
+      householdId = ensured.householdId;
+      if (!householdId) {
+        return {
+          kind: "error",
+          message:
+            ensured.error ??
+            "No household is linked to your account yet. Run the ensure_my_household migration in Supabase, then sign in again.",
+        };
+      }
+    }
 
     if (!householdId) return { kind: "no-household" };
 

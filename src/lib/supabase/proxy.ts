@@ -1,6 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseEnv } from "./env";
+import {
+  isAuthRoutePath,
+  isBenignSessionError,
+  isPublicApiPath,
+} from "./proxy-helpers";
 
 /**
  * Refresh the auth session on each matched request (Next.js 16 Proxy).
@@ -10,23 +15,6 @@ import { getSupabaseEnv } from "./env";
  * Important: never let Supabase network/config failures become an unhandled
  * 500 on every route — fall back to the login screen with a safe error flag.
  */
-
-function isBenignSessionError(error: {
-  message?: string;
-  name?: string;
-  status?: number;
-}): boolean {
-  const message = (error.message ?? "").toLowerCase();
-  const name = (error.name ?? "").toLowerCase();
-  return (
-    name.includes("authsessionmissing") ||
-    message.includes("auth session missing") ||
-    message.includes("session missing") ||
-    message.includes("refresh token") ||
-    message.includes("not authenticated") ||
-    error.status === 401
-  );
-}
 
 function clearSupabaseCookies(
   request: NextRequest,
@@ -56,11 +44,8 @@ export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const path = request.nextUrl.pathname;
-  const isAuthRoute =
-    path.startsWith("/login") || path.startsWith("/signup");
-  // Health/status must stay reachable without auth for troubleshooting.
-  const isPublicApi =
-    path.startsWith("/api/status") || path.startsWith("/api/capture/");
+  const isAuthRoute = isAuthRoutePath(path);
+  const isPublicApi = isPublicApiPath(path);
 
   try {
     const supabase = createServerClient(env.url, env.anonKey, {

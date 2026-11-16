@@ -39,13 +39,29 @@ Set `OPENAI_API_KEY` as a Cursor app secret (never commit it).
 - Capture analyse endpoint requires auth when Supabase is configured
 - OpenAI key stays server-side only
 
+## Auth setup (required for live signup / sign-in)
+
+1. In Supabase SQL editor, run **both** migrations in order:
+   - `supabase/migrations/20261114000000_household_inventory.sql`
+   - `supabase/migrations/20261116000000_ensure_my_household.sql`
+2. Authentication → URL configuration:
+   - Site URL: `https://homebase.apps.grok.bot`
+   - Redirect URLs: `https://homebase.apps.grok.bot/**`
+3. Authentication → Providers → Email:
+   - For easiest testing, disable **Confirm email**
+4. Cursor App Secrets (names exact): `SUPABASE_URL`, `SUPABASE_ANON_KEY` (anon/publishable key only)
+
+After signup/sign-in the app calls `ensure_my_household` so every user gets a pantry/fridge/freezer even if the auth trigger was missing.
+
 ## Develop
 
 ```bash
 npm install
 cp .env.example .env.local
 npm run dev
+npm test
 ```
+
 
 ## Project map
 
