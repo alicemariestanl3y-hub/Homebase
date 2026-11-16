@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const ITEMS = [
   { href: "/", label: "Home", icon: "home", soon: false },
@@ -12,11 +12,35 @@ const ITEMS = [
 ] as const;
 
 /**
- * Must render under a Suspense boundary when cacheComponents is on —
- * usePathname can suspend / throw into the route error boundary otherwise.
+ * Avoid usePathname() entirely — with Cache Components + the auth proxy it
+ * can throw into the route error boundary on the published host (digest
+ * 1569762240). Active state is synced from the browser location after mount.
  */
 export function BottomNav() {
-  const pathname = usePathname() ?? "/";
+  const [pathname, setPathname] = useState("/");
+
+  useEffect(() => {
+    const sync = () => setPathname(window.location.pathname);
+
+    sync();
+    window.addEventListener("popstate", sync);
+
+    const { pushState, replaceState } = window.history;
+    window.history.pushState = function (...args) {
+      pushState.apply(this, args);
+      sync();
+    };
+    window.history.replaceState = function (...args) {
+      replaceState.apply(this, args);
+      sync();
+    };
+
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.history.pushState = pushState;
+      window.history.replaceState = replaceState;
+    };
+  }, []);
 
   return (
     <nav className="hb-bottom-nav" aria-label="Primary">
@@ -31,6 +55,7 @@ export function BottomNav() {
             href={item.href}
             className={`hb-bottom-nav__item${active ? " is-active" : ""}`}
             aria-current={active ? "page" : undefined}
+            onClick={() => setPathname(item.href)}
           >
             <NavIcon name={item.icon} />
             <span>{item.label}</span>
