@@ -2,17 +2,21 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { signIn } from "@/app/actions/auth";
 import { AuthForm } from "@/components/auth/AuthForm";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
+import {
+  diagnoseSupabaseEnv,
+  getSupabaseEnv,
+  supabaseConfigUserMessage,
+} from "@/lib/supabase/env";
 
 type LoginContentProps = {
   searchParams: Promise<{ error?: string }>;
 };
 
 async function LoginContent({ searchParams }: LoginContentProps) {
-  // Secrets exist only at request time on the published host — never decide
-  // configured/demo from the build-time prerender.
+  // Secrets exist only at request time on the published host.
   await connection();
-  const configured = isSupabaseConfigured();
+  const env = getSupabaseEnv();
+  const diagnosis = diagnoseSupabaseEnv();
   const params = await searchParams;
   const configError =
     params.error === "supabase_auth" ||
@@ -26,20 +30,40 @@ async function LoginContent({ searchParams }: LoginContentProps) {
 
       {configError ? (
         <p className="auth-error">
-          Couldn’t reach your household database. Check that the Project URL
-          and publishable key in App Secrets match your Supabase project, then
-          try again.
+          Couldn’t reach your household database. In App Secrets, set
+          SUPABASE_URL to your Project URL (https://….supabase.co) and
+          SUPABASE_ANON_KEY to the anon/publishable key — not the service-role
+          key — then republish.
         </p>
       ) : null}
 
-      {configured ? (
+      {env ? (
         <AuthForm mode="login" action={signIn} />
       ) : (
-        <p className="auth-error">
-          HomeBase can’t see your household database yet. Open Cursor → App
-          Secrets, confirm SUPABASE_URL and SUPABASE_ANON_KEY are saved, then
-          pull to refresh this page.
-        </p>
+        <>
+          <p className="auth-error">
+            {supabaseConfigUserMessage(diagnosis.reason)} Re-save both App
+            Secrets, then ask me to republish.
+          </p>
+          <p className="inventory-demo-note">
+            Check: URL {diagnosis.hasUrl ? "present" : "missing"}
+            {diagnosis.hasUrl
+              ? diagnosis.urlOk
+                ? " (shape ok)"
+                : " (shape invalid)"
+              : ""}
+            ; key {diagnosis.hasAnonKey ? "present" : "missing"}
+            {diagnosis.hasAnonKey
+              ? diagnosis.keyLooksLikeJwt
+                ? " (length ok)"
+                : " (too short)"
+              : ""}
+            .
+            {diagnosis.relatedEnvNames.length > 0
+              ? ` Env names seen: ${diagnosis.relatedEnvNames.join(", ")}.`
+              : " No SUPABASE_* env names are visible to this server."}
+          </p>
+        </>
       )}
     </div>
   );

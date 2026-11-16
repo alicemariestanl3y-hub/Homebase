@@ -14,5 +14,11 @@ export async function GET() {
     ok: true,
     supabaseConfigured: supabase.configured,
     supabaseHost: supabase.host,
+    supabaseReason: supabase.reason,
+    hasUrl: supabase.hasUrl,
+    hasAnonKey: supabase.hasAnonKey,
+    urlOk: supabase.urlOk,
+    keyLooksLikeJwt: supabase.keyLooksLikeJwt,
+    relatedEnvNames: supabase.relatedEnvNames,
   });
 }
