@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { signUp } from "@/app/actions/auth";
 import { AuthForm } from "@/components/auth/AuthForm";
 import {
   diagnoseSupabaseEnv,
   getSupabaseEnv,
+  getSupabasePublicStatus,
   supabaseConfigUserMessage,
 } from "@/lib/supabase/env";
 
@@ -12,6 +12,7 @@ async function SignupContent() {
   await connection();
   const env = getSupabaseEnv();
   const diagnosis = diagnoseSupabaseEnv();
+  const status = getSupabasePublicStatus();
 
   return (
     <div className="auth-card">
@@ -22,7 +23,14 @@ async function SignupContent() {
       </p>
 
       {env ? (
-        <AuthForm mode="signup" action={signUp} />
+        <>
+          <AuthForm mode="signup" />
+          {status.host ? (
+            <p className="inventory-demo-note">
+              Connected project host: {status.host}
+            </p>
+          ) : null}
+        </>
       ) : (
         <>
           <p className="auth-error">

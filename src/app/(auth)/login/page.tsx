@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { signIn } from "@/app/actions/auth";
 import { AuthForm } from "@/components/auth/AuthForm";
 import {
   diagnoseSupabaseEnv,
   getSupabaseEnv,
+  getSupabasePublicStatus,
   supabaseConfigUserMessage,
 } from "@/lib/supabase/env";
 
@@ -13,10 +13,10 @@ type LoginContentProps = {
 };
 
 async function LoginContent({ searchParams }: LoginContentProps) {
-  // Secrets exist only at request time on the published host.
   await connection();
   const env = getSupabaseEnv();
   const diagnosis = diagnoseSupabaseEnv();
+  const status = getSupabasePublicStatus();
   const params = await searchParams;
   const configError =
     params.error === "supabase_auth" ||
@@ -38,7 +38,14 @@ async function LoginContent({ searchParams }: LoginContentProps) {
       ) : null}
 
       {env ? (
-        <AuthForm mode="login" action={signIn} />
+        <>
+          <AuthForm mode="login" />
+          {status.host ? (
+            <p className="inventory-demo-note">
+              Connected project host: {status.host}
+            </p>
+          ) : null}
+        </>
       ) : (
         <>
           <p className="auth-error">

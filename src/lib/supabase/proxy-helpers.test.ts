@@ -55,6 +55,7 @@ describe("route classifiers", () => {
     assert.equal(isAuthRoutePath("/"), false);
     assert.equal(isPublicApiPath("/api/status"), true);
     assert.equal(isPublicApiPath("/api/capture/analyze"), true);
+    assert.equal(isPublicApiPath("/api/auth/signup"), true);
     assert.equal(isPublicApiPath("/capture"), false);
   });
 });
