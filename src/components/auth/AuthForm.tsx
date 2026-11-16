@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import Link from "next/link";
 import type { AuthActionState } from "@/app/actions/auth";
 
@@ -12,11 +12,23 @@ type AuthFormProps = {
   ) => Promise<AuthActionState>;
 };
 
-const initialState: AuthActionState = { error: null, message: null };
+const initialState: AuthActionState = {
+  error: null,
+  message: null,
+  redirectTo: null,
+};
 
 export function AuthForm({ mode, action }: AuthFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const isSignup = mode === "signup";
+
+  // Full document navigation after the action response has applied Set-Cookie.
+  // Avoids Next.js server redirect() dropping auth cookies on some hosts.
+  useEffect(() => {
+    if (state.redirectTo) {
+      window.location.assign(state.redirectTo);
+    }
+  }, [state.redirectTo]);
 
   return (
     <form className="auth-form" action={formAction}>
@@ -58,9 +70,16 @@ export function AuthForm({ mode, action }: AuthFormProps) {
 
       {state.error ? <p className="auth-error">{state.error}</p> : null}
       {state.message ? <p className="auth-success">{state.message}</p> : null}
+      {state.redirectTo ? (
+        <p className="auth-success">Signed in — opening your kitchen…</p>
+      ) : null}
 
       <button className="auth-submit" type="submit" disabled={pending}>
-        {pending ? "Please wait…" : isSignup ? "Create account" : "Sign in"}
+        {pending || state.redirectTo
+          ? "Please wait…"
+          : isSignup
+            ? "Create account"
+            : "Sign in"}
       </button>
 
       <p className="auth-switch">

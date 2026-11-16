@@ -16,7 +16,7 @@ export default function AppError({
         <h1 className="inventory-brand">Something went wrong</h1>
         <p className="auth-lead">
           The app hit an unexpected error while loading. Tap try again, or go
-          back to sign in.
+          back to sign in and try once more.
         </p>
         {error?.digest ? (
           <p className="inventory-demo-note">Error id: {error.digest}</p>
@@ -26,6 +26,8 @@ export default function AppError({
         </button>
         <p className="auth-switch">
           <Link href="/login">Back to sign in</Link>
+          {" · "}
+          <Link href="/signup">Create an account</Link>
         </p>
       </div>
     </main>

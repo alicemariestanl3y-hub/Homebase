@@ -390,12 +390,10 @@ export async function getCurrentHouseholdId(): Promise<string | null> {
       .limit(1)
       .maybeSingle();
 
-    if (error) throw error;
+    // Never throw into the route error boundary — home shows a friendly empty state.
+    if (error) return null;
     return data?.household_id ?? null;
-  } catch (error) {
-    // Surface as a soft miss so page loaders can show a friendly empty state
-    // instead of an unhandled 500 when auth/session is briefly unavailable.
-    if (error && typeof error === "object" && "code" in error) throw error;
+  } catch {
     return null;
   }
 }
