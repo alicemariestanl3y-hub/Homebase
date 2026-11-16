@@ -2,11 +2,16 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { signUp } from "@/app/actions/auth";
 import { AuthForm } from "@/components/auth/AuthForm";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
+import {
+  diagnoseSupabaseEnv,
+  getSupabaseEnv,
+  supabaseConfigUserMessage,
+} from "@/lib/supabase/env";
 
 async function SignupContent() {
   await connection();
-  const configured = isSupabaseConfigured();
+  const env = getSupabaseEnv();
+  const diagnosis = diagnoseSupabaseEnv();
 
   return (
     <div className="auth-card">
@@ -16,14 +21,33 @@ async function SignupContent() {
         Create an account. We&apos;ll set up your pantry, fridge and freezer.
       </p>
 
-      {configured ? (
+      {env ? (
         <AuthForm mode="signup" action={signUp} />
       ) : (
-        <p className="auth-error">
-          HomeBase can’t see your household database yet. Open Cursor → App
-          Secrets, confirm SUPABASE_URL and SUPABASE_ANON_KEY are saved, then
-          pull to refresh this page.
-        </p>
+        <>
+          <p className="auth-error">
+            {supabaseConfigUserMessage(diagnosis.reason)} Re-save both App
+            Secrets, then ask me to republish.
+          </p>
+          <p className="inventory-demo-note">
+            Check: URL {diagnosis.hasUrl ? "present" : "missing"}
+            {diagnosis.hasUrl
+              ? diagnosis.urlOk
+                ? " (shape ok)"
+                : " (shape invalid)"
+              : ""}
+            ; key {diagnosis.hasAnonKey ? "present" : "missing"}
+            {diagnosis.hasAnonKey
+              ? diagnosis.keyLooksLikeJwt
+                ? " (length ok)"
+                : " (too short)"
+              : ""}
+            .
+            {diagnosis.relatedEnvNames.length > 0
+              ? ` Env names seen: ${diagnosis.relatedEnvNames.join(", ")}.`
+              : " No SUPABASE_* env names are visible to this server."}
+          </p>
+        </>
       )}
     </div>
   );
