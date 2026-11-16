@@ -30,10 +30,10 @@ async function LoginContent({ searchParams }: LoginContentProps) {
 
       {configError ? (
         <p className="auth-error">
-          Couldn’t reach your household database. In App Secrets, set
-          SUPABASE_URL to your Project URL (https://….supabase.co) and
-          SUPABASE_ANON_KEY to the anon/publishable key — not the service-role
-          key — then republish.
+          Couldn’t verify your session with Supabase. Try signing in below. If
+          it keeps failing, re-save App Secrets: SUPABASE_URL =
+          https://YOUR_REF.supabase.co and SUPABASE_ANON_KEY = the
+          anon/publishable key (not the service-role key), then republish.
         </p>
       ) : null}
 

@@ -10,6 +10,41 @@ import { getSupabaseEnv } from "./env";
  * Important: never let Supabase network/config failures become an unhandled
  * 500 on every route — fall back to the login screen with a safe error flag.
  */
+
+function isBenignSessionError(error: {
+  message?: string;
+  name?: string;
+  status?: number;
+}): boolean {
+  const message = (error.message ?? "").toLowerCase();
+  const name = (error.name ?? "").toLowerCase();
+  return (
+    name.includes("authsessionmissing") ||
+    message.includes("auth session missing") ||
+    message.includes("session missing") ||
+    message.includes("refresh token") ||
+    message.includes("not authenticated") ||
+    error.status === 401
+  );
+}
+
+function clearSupabaseCookies(
+  request: NextRequest,
+  response: NextResponse,
+): void {
+  for (const cookie of request.cookies.getAll()) {
+    if (
+      cookie.name.startsWith("sb-") ||
+      cookie.name.includes("supabase")
+    ) {
+      response.cookies.set(cookie.name, "", {
+        path: "/",
+        maxAge: 0,
+      });
+    }
+  }
+}
+
 export async function updateSession(request: NextRequest) {
   const env = getSupabaseEnv();
 
@@ -23,6 +58,9 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isAuthRoute =
     path.startsWith("/login") || path.startsWith("/signup");
+  // Health/status must stay reachable without auth for troubleshooting.
+  const isPublicApi =
+    path.startsWith("/api/status") || path.startsWith("/api/capture/");
 
   try {
     const supabase = createServerClient(env.url, env.anonKey, {
@@ -48,19 +86,37 @@ export async function updateSession(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (error) {
-      // Invalid key / project paused / network — treat as signed out.
-      if (!isAuthRoute) {
+      // Missing/expired session is normal when signed out — don't scare the user.
+      if (isBenignSessionError(error)) {
+        if (!isAuthRoute && !isPublicApi) {
+          const url = request.nextUrl.clone();
+          url.pathname = "/login";
+          url.search = "";
+          const redirect = NextResponse.redirect(url);
+          clearSupabaseCookies(request, redirect);
+          return redirect;
+        }
+        clearSupabaseCookies(request, supabaseResponse);
+        return supabaseResponse;
+      }
+
+      // Real config/API failures (bad key, paused project, etc.).
+      if (!isAuthRoute && !isPublicApi) {
         const url = request.nextUrl.clone();
         url.pathname = "/login";
         url.searchParams.set("error", "supabase_auth");
-        return NextResponse.redirect(url);
+        const redirect = NextResponse.redirect(url);
+        clearSupabaseCookies(request, redirect);
+        return redirect;
       }
+      clearSupabaseCookies(request, supabaseResponse);
       return supabaseResponse;
     }
 
-    if (!user && !isAuthRoute) {
+    if (!user && !isAuthRoute && !isPublicApi) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
+      url.search = "";
       return NextResponse.redirect(url);
     }
 
@@ -72,7 +128,7 @@ export async function updateSession(request: NextRequest) {
 
     return supabaseResponse;
   } catch {
-    if (isAuthRoute) {
+    if (isAuthRoute || isPublicApi) {
       return NextResponse.next({ request });
     }
     const url = request.nextUrl.clone();
