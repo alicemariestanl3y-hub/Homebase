@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 const ITEMS = [
   { href: "/", label: "Home", icon: "home", soon: false },
   { href: "/capture", label: "Add items", icon: "camera", soon: false },
-  { href: "/shopping", label: "Shopping", icon: "list", soon: true },
-  { href: "/meals", label: "Meals", icon: "meals", soon: true },
+  { href: "/grocery", label: "Import", icon: "list", soon: false },
+  { href: "/meals", label: "Meals", icon: "meals", soon: false },
   { href: "/insights", label: "Insights", icon: "chart", soon: true },
 ] as const;
 
