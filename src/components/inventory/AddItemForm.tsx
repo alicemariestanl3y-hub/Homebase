@@ -1,10 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
-import {
-  addInventoryItem,
-  type MutationState,
-} from "@/app/actions/inventory";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { addInventoryItemClient } from "@/lib/inventory/client-mutations";
 import { LOCATION_LABELS, LOCATION_ORDER } from "@/lib/inventory/labels";
 import { INVENTORY_UNITS, UNIT_LABELS } from "@/lib/inventory/units";
 import type { LocationType } from "@/lib/inventory/types";
@@ -13,23 +11,34 @@ type AddItemFormProps = {
   activeLocation: LocationType;
 };
 
-const initialState: MutationState = { error: null, ok: false };
-
 export function AddItemForm({ activeLocation }: AddItemFormProps) {
-  const [state, formAction, pending] = useActionState(
-    addInventoryItem,
-    initialState,
-  );
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+  const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (state.ok) {
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setOk(false);
+
+    const formData = new FormData(event.currentTarget);
+
+    startTransition(async () => {
+      const result = await addInventoryItemClient(formData);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setOk(true);
       formRef.current?.reset();
-    }
-  }, [state.ok]);
+      router.refresh();
+    });
+  }
 
   return (
-    <form ref={formRef} className="add-item-form" action={formAction}>
+    <form ref={formRef} className="add-item-form" onSubmit={onSubmit}>
       <h3 className="add-item-form__title">Add item</h3>
 
       <label className="auth-field">
@@ -65,7 +74,12 @@ export function AddItemForm({ activeLocation }: AddItemFormProps) {
 
       <label className="auth-field">
         <span>Location</span>
-        <select name="locationType" required defaultValue={activeLocation} key={activeLocation}>
+        <select
+          name="locationType"
+          required
+          defaultValue={activeLocation}
+          key={activeLocation}
+        >
           {LOCATION_ORDER.map((location) => (
             <option key={location} value={location}>
               {LOCATION_LABELS[location]}
@@ -84,8 +98,8 @@ export function AddItemForm({ activeLocation }: AddItemFormProps) {
         <input name="notes" type="text" placeholder="Opened yesterday" />
       </label>
 
-      {state.error ? <p className="auth-error">{state.error}</p> : null}
-      {state.ok ? <p className="auth-success">Added to inventory.</p> : null}
+      {error ? <p className="auth-error">{error}</p> : null}
+      {ok ? <p className="auth-success">Added to inventory.</p> : null}
 
       <button className="auth-submit" type="submit" disabled={pending}>
         {pending ? "Adding…" : "Add to inventory"}

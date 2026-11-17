@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { throwDbError } from "./db-error";
 import {
   mapActivity,
   mapHousehold,
@@ -27,6 +28,29 @@ import type {
 const ITEM_SELECT =
   "id, household_id, location_id, name, quantity, unit, expires_on, notes, updated_at";
 
+type AuthedClient = Awaited<ReturnType<typeof createClient>>;
+
+/** Activity history must not block the primary inventory write. */
+async function recordActivity(
+  supabase: AuthedClient,
+  row: {
+    household_id: string;
+    item_id: string;
+    item_name: string;
+    location_type: LocationType;
+    action: "added" | "consumed" | "adjusted";
+    quantity_delta: number;
+    unit: string;
+    note: string;
+    actor_user_id: string;
+  },
+): Promise<void> {
+  const { error } = await supabase.from("inventory_activity").insert(row);
+  if (error) {
+    console.error("inventory_activity insert failed:", error);
+  }
+}
+
 /**
  * Live inventory backed by Supabase + RLS.
  * Every query runs as the signed-in user; Postgres enforces household access.
@@ -42,7 +66,9 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       .eq("id", householdId)
       .maybeSingle();
 
-    if (householdError) throw householdError;
+    if (householdError) {
+      throwDbError(householdError, "Could not load household.");
+    }
     if (!householdRow) return null;
 
     const [
@@ -69,15 +95,22 @@ export class SupabaseInventoryRepository implements InventoryRepository {
         .limit(20),
     ]);
 
-    if (locationsError) throw locationsError;
-    if (itemsError) throw itemsError;
-    if (activityError) throw activityError;
+    if (locationsError) {
+      throwDbError(locationsError, "Could not load locations.");
+    }
+    if (itemsError) throwDbError(itemsError, "Could not load inventory items.");
+    // Activity is secondary — empty feed is better than failing the kitchen page.
+    if (activityError) {
+      console.error("inventory_activity select failed:", activityError);
+    }
 
     return {
       household: mapHousehold(householdRow as DbHousehold),
       locations: ((locations ?? []) as DbLocation[]).map(mapLocation),
       items: ((items ?? []) as DbInventoryItem[]).map(mapItem),
-      activity: ((activity ?? []) as DbInventoryActivity[]).map(mapActivity),
+      activity: activityError
+        ? []
+        : ((activity ?? []) as DbInventoryActivity[]).map(mapActivity),
     };
   }
 
@@ -94,7 +127,9 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       .eq("type", locationType)
       .maybeSingle();
 
-    if (locationError) throw locationError;
+    if (locationError) {
+      throwDbError(locationError, "Could not resolve storage location.");
+    }
     if (!location) return [];
 
     const { data, error } = await supabase
@@ -103,7 +138,7 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       .eq("household_id", householdId)
       .eq("location_id", location.id);
 
-    if (error) throw error;
+    if (error) throwDbError(error, "Could not list inventory items.");
     return sortForExpiryPriority(
       ((data ?? []) as DbInventoryItem[]).map(mapItem),
     );
@@ -124,7 +159,10 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    if (error) throw error;
+    if (error) {
+      console.error("inventory_activity select failed:", error);
+      return [];
+    }
     return ((data ?? []) as DbInventoryActivity[]).map(mapActivity);
   }
 
@@ -151,25 +189,24 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       .select(ITEM_SELECT)
       .single();
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      throwDbError(insertError, "Could not add inventory item.");
+    }
 
     const item = mapItem(inserted as DbInventoryItem);
 
-    const { error: activityError } = await supabase
-      .from("inventory_activity")
-      .insert({
-        household_id: input.householdId,
-        item_id: item.id,
-        item_name: item.name,
-        location_type: input.locationType,
-        action: "added",
-        quantity_delta: item.quantity,
-        unit: item.unit,
-        note: "Added from HomeBase",
-        actor_user_id: user.id,
-      });
+    await recordActivity(supabase, {
+      household_id: input.householdId,
+      item_id: item.id,
+      item_name: item.name,
+      location_type: input.locationType,
+      action: "added",
+      quantity_delta: item.quantity,
+      unit: item.unit,
+      note: "Added from HomeBase",
+      actor_user_id: user.id,
+    });
 
-    if (activityError) throw activityError;
     return item;
   }
 
@@ -198,25 +235,24 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       .select(ITEM_SELECT)
       .single();
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      throwDbError(updateError, "Could not update inventory item.");
+    }
 
     const item = mapItem(updatedRow as DbInventoryItem);
 
-    const { error: activityError } = await supabase
-      .from("inventory_activity")
-      .insert({
-        household_id: input.householdId,
-        item_id: item.id,
-        item_name: item.name,
-        location_type: input.locationType,
-        action: "adjusted",
-        quantity_delta: item.quantity - existing.quantity,
-        unit: item.unit,
-        note: "Edited from HomeBase",
-        actor_user_id: user.id,
-      });
+    await recordActivity(supabase, {
+      household_id: input.householdId,
+      item_id: item.id,
+      item_name: item.name,
+      location_type: input.locationType,
+      action: "adjusted",
+      quantity_delta: item.quantity - existing.quantity,
+      unit: item.unit,
+      note: "Edited from HomeBase",
+      actor_user_id: user.id,
+    });
 
-    if (activityError) throw activityError;
     return item;
   }
 
@@ -238,21 +274,17 @@ export class SupabaseInventoryRepository implements InventoryRepository {
     );
     const remaining = existing.quantity - input.amount;
 
-    const { error: activityError } = await supabase
-      .from("inventory_activity")
-      .insert({
-        household_id: input.householdId,
-        item_id: existing.id,
-        item_name: existing.name,
-        location_type: locationType,
-        action: "consumed",
-        quantity_delta: -input.amount,
-        unit: existing.unit,
-        note: input.note?.trim() || "Used from HomeBase",
-        actor_user_id: user.id,
-      });
-
-    if (activityError) throw activityError;
+    await recordActivity(supabase, {
+      household_id: input.householdId,
+      item_id: existing.id,
+      item_name: existing.name,
+      location_type: locationType,
+      action: "consumed",
+      quantity_delta: -input.amount,
+      unit: existing.unit,
+      note: input.note?.trim() || "Used from HomeBase",
+      actor_user_id: user.id,
+    });
 
     if (remaining <= 0) {
       const { error: deleteError } = await supabase
@@ -260,7 +292,9 @@ export class SupabaseInventoryRepository implements InventoryRepository {
         .delete()
         .eq("id", input.itemId)
         .eq("household_id", input.householdId);
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        throwDbError(deleteError, "Could not remove empty item.");
+      }
       return null;
     }
 
@@ -272,7 +306,9 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       .select(ITEM_SELECT)
       .single();
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      throwDbError(updateError, "Could not update quantity.");
+    }
     return mapItem(updatedRow as DbInventoryItem);
   }
 
@@ -285,21 +321,17 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       existing.locationId,
     );
 
-    const { error: activityError } = await supabase
-      .from("inventory_activity")
-      .insert({
-        household_id: input.householdId,
-        item_id: existing.id,
-        item_name: existing.name,
-        location_type: locationType,
-        action: "adjusted",
-        quantity_delta: -existing.quantity,
-        unit: existing.unit,
-        note: input.note?.trim() || "Removed from HomeBase",
-        actor_user_id: user.id,
-      });
-
-    if (activityError) throw activityError;
+    await recordActivity(supabase, {
+      household_id: input.householdId,
+      item_id: existing.id,
+      item_name: existing.name,
+      location_type: locationType,
+      action: "adjusted",
+      quantity_delta: -existing.quantity,
+      unit: existing.unit,
+      note: input.note?.trim() || "Removed from HomeBase",
+      actor_user_id: user.id,
+    });
 
     const { error: deleteError } = await supabase
       .from("inventory_items")
@@ -307,19 +339,19 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       .eq("id", input.itemId)
       .eq("household_id", input.householdId);
 
-    if (deleteError) throw deleteError;
+    if (deleteError) {
+      throwDbError(deleteError, "Could not remove item.");
+    }
   }
 }
-
-type AuthedClient = Awaited<ReturnType<typeof createClient>>;
 
 async function requireUser(supabase: AuthedClient) {
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
-  if (error) throw error;
-  if (!user) throw new Error("You must be signed in.");
+  if (error) throwDbError(error, "You must be signed in.");
+  if (!user?.id) throw new Error("You must be signed in.");
   return user;
 }
 
@@ -335,8 +367,12 @@ async function requireLocation(
     .eq("type", locationType)
     .maybeSingle();
 
-  if (error) throw error;
-  if (!data) throw new Error(`Unknown location ${locationType}`);
+  if (error) throwDbError(error, `Could not look up ${locationType}.`);
+  if (!data) {
+    throw new Error(
+      `No ${locationType} location for your household. Run the HomeBase Supabase migrations, then sign out and sign in again.`,
+    );
+  }
   return data;
 }
 
@@ -352,7 +388,7 @@ async function requireItem(
     .eq("household_id", householdId)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throwDbError(error, "Could not load item.");
   if (!data) throw new Error("Item not found.");
   return mapItem(data as DbInventoryItem);
 }
@@ -367,7 +403,7 @@ async function requireLocationTypeForItem(
     .eq("id", locationId)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throwDbError(error, "Could not resolve item location.");
   if (!data) throw new Error("Location not found for item.");
   return data.type as LocationType;
 }

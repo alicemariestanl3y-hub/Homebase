@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveCapturedItems } from "@/app/actions/capture";
 import { filesToResizedDataUrls } from "@/lib/capture/client-resize";
 import { findDuplicateMatches } from "@/lib/capture/duplicates";
 import type { CapturedCandidate, DuplicateMatch } from "@/lib/capture/types";
@@ -105,13 +104,39 @@ export function SmartCaptureFlow({
   function save() {
     startTransition(async () => {
       setError(null);
-      const result = await saveCapturedItems(candidates);
-      if (result.error) {
-        setError(result.error);
-        return;
+      try {
+        const response = await fetch("/api/capture/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ candidates }),
+        });
+
+        let result: { error: string | null; savedCount: number };
+        try {
+          result = (await response.json()) as {
+            error: string | null;
+            savedCount: number;
+          };
+        } catch {
+          setError(
+            `Save failed (${response.status}). The server did not return JSON — items may not have reached Supabase.`,
+          );
+          return;
+        }
+
+        if (!response.ok || result.error) {
+          setError(result.error || `Save failed (${response.status}).`);
+          return;
+        }
+
+        router.push("/");
+        router.refresh();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Network error while saving.",
+        );
       }
-      router.push("/");
-      router.refresh();
     });
   }
 
