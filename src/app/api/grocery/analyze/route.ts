@@ -4,6 +4,7 @@ import {
   extractGroceryFromText,
 } from "@/lib/grocery/extract";
 import { findDuplicateGroceryImport } from "@/lib/grocery/perform-save";
+import { detectWoolworthsContent } from "@/lib/grocery/retailers/woolworths";
 import type { GrocerySourceType } from "@/lib/grocery/types";
 import { resolveHouseholdIdForRequest } from "@/lib/household/resolve";
 import { takeCaptureRateLimit } from "@/lib/capture/rate-limit";
@@ -41,14 +42,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = getOpenAiApiKey();
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "OPENAI_API_KEY is not configured." },
-        { status: 503 },
-      );
-    }
-
     const body = (await request.json()) as {
       sourceType?: GrocerySourceType;
       text?: string;
@@ -57,17 +50,31 @@ export async function POST(request: Request) {
     };
 
     const sourceType = body.sourceType ?? "pasted_list";
+    const text = String(body.text ?? "");
+    const images = Array.isArray(body.images) ? body.images.slice(0, 6) : [];
+    const woolworthsText =
+      (sourceType === "pasted_list" || sourceType === "email") &&
+      detectWoolworthsContent(text);
+
+    const apiKey = getOpenAiApiKey();
+    // Woolworths HTML/text can parse without OpenAI; screenshots still need it.
+    if (!apiKey && !woolworthsText) {
+      return NextResponse.json(
+        { error: "OPENAI_API_KEY is not configured." },
+        { status: 503 },
+      );
+    }
+
     let result;
     if (sourceType === "pasted_list" || sourceType === "email") {
       result = await extractGroceryFromText({
-        apiKey,
-        text: String(body.text ?? ""),
+        apiKey: apiKey ?? "unused-for-woolworths-parser",
+        text,
         sourceType,
       });
     } else {
-      const images = Array.isArray(body.images) ? body.images.slice(0, 6) : [];
       result = await extractGroceryFromImages({
-        apiKey,
+        apiKey: apiKey!,
         images,
         sourceType,
       });
@@ -86,8 +93,12 @@ export async function POST(request: Request) {
       contentHash: result.contentHash,
       fulfillment: result.fulfillment,
       retailer: result.retailer,
+      retailerCode: result.retailerCode,
       orderReference: result.orderReference,
+      currency: result.currency,
+      orderTotal: result.orderTotal,
       model: result.model,
+      parser: result.parser,
       duplicateImportId,
       warning: duplicateImportId
         ? "This looks like an order you already imported."

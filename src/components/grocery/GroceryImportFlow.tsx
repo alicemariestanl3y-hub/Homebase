@@ -4,7 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { filesToResizedDataUrls } from "@/lib/capture/client-resize";
 import { findIngredientMatches } from "@/lib/ingredients/matching";
-import type { GroceryCandidate, GrocerySourceType } from "@/lib/grocery/types";
+import type {
+  GroceryCandidate,
+  GroceryRetailerCode,
+  GrocerySourceType,
+} from "@/lib/grocery/types";
 import { LOCATION_LABELS, LOCATION_ORDER } from "@/lib/inventory/labels";
 import { INVENTORY_UNITS, UNIT_LABELS } from "@/lib/inventory/units";
 import type { InventoryItem, LocationType } from "@/lib/inventory/types";
@@ -22,7 +26,7 @@ export function GroceryImportFlow({
 }: GroceryImportFlowProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("source");
-  const [sourceType, setSourceType] = useState<GrocerySourceType>("screenshot");
+  const [sourceType, setSourceType] = useState<GrocerySourceType>("email");
   const [pastedText, setPastedText] = useState("");
   const [previews, setPreviews] = useState<string[]>([]);
   const [candidates, setCandidates] = useState<GroceryCandidate[]>([]);
@@ -31,7 +35,12 @@ export function GroceryImportFlow({
     "ordered" | "delivered" | "mixed" | "unknown"
   >("unknown");
   const [retailer, setRetailer] = useState<string | null>(null);
+  const [retailerCode, setRetailerCode] = useState<GroceryRetailerCode | null>(
+    null,
+  );
   const [orderReference, setOrderReference] = useState<string | null>(null);
+  const [orderTotal, setOrderTotal] = useState<number | null>(null);
+  const [currency, setCurrency] = useState("AUD");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -55,15 +64,15 @@ export function GroceryImportFlow({
     const pdfs = files.filter((file) => file.type === "application/pdf");
     if (pdfs.length > 0 && files.every((file) => file.type === "application/pdf")) {
       setError(
-        "For PDFs, paste the itemised text from the order email/PDF, or upload receipt screenshots. Image-based PDFs aren’t OCR’d yet.",
+        "For PDFs, paste the Woolworths email HTML/text, or upload screenshots of the item table.",
       );
-      setSourceType("pasted_list");
+      setSourceType("email");
       return;
     }
     try {
       const urls = await filesToResizedDataUrls(files);
       if (urls.length === 0) {
-        setError("Choose image/screenshot files (JPEG, PNG, HEIC converted).");
+        setError("Choose image/screenshot files (JPEG, PNG).");
         return;
       }
       setSourceType("screenshot");
@@ -78,17 +87,13 @@ export function GroceryImportFlow({
     setError(null);
     setInfo(null);
     try {
+      const usingImages = previews.length > 0;
       const response = await fetch("/api/grocery/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          sourceType:
-            previews.length > 0
-              ? sourceType === "pasted_list"
-                ? "screenshot"
-                : sourceType
-              : "pasted_list",
+          sourceType: usingImages ? "screenshot" : "email",
           text: pastedText,
           images: previews,
         }),
@@ -98,7 +103,11 @@ export function GroceryImportFlow({
         contentHash?: string;
         fulfillment?: typeof fulfillment;
         retailer?: string | null;
+        retailerCode?: GroceryRetailerCode | null;
         orderReference?: string | null;
+        orderTotal?: number | null;
+        currency?: string;
+        parser?: string;
         error?: string;
         warning?: string;
       };
@@ -107,15 +116,31 @@ export function GroceryImportFlow({
       setCandidates(
         (json.candidates ?? []).map((item) => ({
           ...item,
-          selected: true,
+          selected: item.selected !== false && item.isFood !== false,
           mergeWithItemId: item.mergeWithItemId ?? null,
+          originalName: item.originalName ?? item.name,
+          standardizedName: item.standardizedName ?? item.name,
+          unitPrice: item.unitPrice ?? null,
+          linePrice: item.linePrice ?? null,
+          currency: item.currency || "AUD",
+          isFood: item.isFood !== false,
+          wasSubstituted: Boolean(item.wasSubstituted),
+          substitutionNote: item.substitutionNote ?? null,
         })),
       );
       setContentHash(json.contentHash ?? "");
       setFulfillment(json.fulfillment ?? "unknown");
       setRetailer(json.retailer ?? null);
+      setRetailerCode(json.retailerCode ?? null);
       setOrderReference(json.orderReference ?? null);
-      setInfo(json.warning ?? null);
+      setOrderTotal(json.orderTotal ?? null);
+      setCurrency(json.currency ?? "AUD");
+      setInfo(
+        json.warning ??
+          (json.parser === "woolworths_html"
+            ? "Recognised Woolworths item table. Check locations and non-food lines before saving."
+            : null),
+      );
       setStep("review");
       setPreviews([]);
     } catch (err) {
@@ -145,7 +170,10 @@ export function GroceryImportFlow({
             sourceLabel: retailer,
             fulfillment,
             retailer,
+            retailerCode,
             orderReference,
+            currency,
+            orderTotal,
             candidates,
           }),
         });
@@ -169,17 +197,17 @@ export function GroceryImportFlow({
   return (
     <div className="capture-flow">
       <div className="capture-hero">
-        <p className="hb-kicker">Grocery import</p>
+        <p className="hb-kicker">Grocery import · Woolworths ready</p>
         <h1
           className="section-title"
           style={{ fontSize: "1.45rem", marginTop: "0.35rem" }}
         >
-          {step === "source" ? "Bring in an order" : "Review before stocking"}
+          {step === "source" ? "Import a Woolworths order" : "Review before stocking"}
         </h1>
         <p style={{ color: "var(--hb-muted)", margin: "0.45rem 0 0", lineHeight: 1.45 }}>
           {step === "source"
-            ? "Upload receipt screenshots or paste an itemised list from an email. Email inbox sync can plug into this same review flow later."
-            : "Correct quantities, mark ordered vs delivered, merge duplicates, then save into your household inventory."}
+            ? "Paste the Woolworths order email (HTML table with Item description, Unit price, Qty, Price) or upload screenshots. A future HomeBase inbox can feed this same review step."
+            : "Confirm pantry/fridge/freezer, include non-food only if you want, merge duplicates, then save. Prices are kept for spending insights."}
         </p>
       </div>
 
@@ -189,13 +217,16 @@ export function GroceryImportFlow({
       {step === "source" ? (
         <section className="capture-drop">
           <label className="auth-field">
-            <span>Paste itemised list</span>
+            <span>Paste Woolworths email (HTML or text)</span>
             <textarea
               className="hb-textarea"
-              rows={6}
+              rows={8}
               value={pastedText}
-              onChange={(event) => setPastedText(event.target.value)}
-              placeholder="Milk 2L x2&#10;Sourdough loaf&#10;Chicken mince 500g"
+              onChange={(event) => {
+                setPastedText(event.target.value);
+                setSourceType("email");
+              }}
+              placeholder="Paste the itemised order email here — including the product table."
             />
           </label>
 
@@ -203,7 +234,7 @@ export function GroceryImportFlow({
             Or upload screenshots
           </p>
           <p style={{ margin: 0, color: "var(--hb-muted)", fontSize: "0.9rem" }}>
-            Online grocery order confirmations and paper receipts (up to 6 images).
+            Screenshots of the Woolworths item table (up to 6 images).
           </p>
           <input
             className="hb-file"
@@ -232,10 +263,22 @@ export function GroceryImportFlow({
             <span>{retailer || "Grocery order"}</span>
             <span>{fulfillment}</span>
             {orderReference ? <span>Ref {orderReference}</span> : null}
+            {orderTotal != null ? (
+              <span>
+                Total ${orderTotal.toFixed(2)} {currency}
+              </span>
+            ) : null}
           </div>
 
           {candidates.map((item) => {
-            const duplicates = findIngredientMatches(item, matchCandidates, 3);
+            const duplicates = findIngredientMatches(
+              {
+                name: item.standardizedName || item.name,
+                ingredientKey: item.ingredientKey,
+              },
+              matchCandidates,
+              3,
+            );
             return (
               <article key={item.id} className="review-card">
                 <label className="review-card__select">
@@ -251,13 +294,36 @@ export function GroceryImportFlow({
                   <span>Include</span>
                 </label>
 
+                {!item.isFood ? (
+                  <p className="confidence-pill">Non-food (excluded by default)</p>
+                ) : null}
+                {item.wasSubstituted ? (
+                  <p className="confidence-pill">Substitution</p>
+                ) : null}
+
                 <label className="auth-field">
-                  <span>Product</span>
+                  <span>Woolworths name (original)</span>
                   <input
                     type="text"
-                    value={item.name}
+                    value={item.originalName || item.name}
                     onChange={(event) =>
-                      updateCandidate(item.id, { name: event.target.value })
+                      updateCandidate(item.id, {
+                        originalName: event.target.value,
+                        name: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <label className="auth-field">
+                  <span>Standard name (recipe matching)</span>
+                  <input
+                    type="text"
+                    value={item.standardizedName || ""}
+                    onChange={(event) =>
+                      updateCandidate(item.id, {
+                        standardizedName: event.target.value,
+                      })
                     }
                   />
                 </label>
@@ -298,13 +364,49 @@ export function GroceryImportFlow({
 
                 <div className="add-item-form__row">
                   <label className="auth-field">
+                    <span>Unit price</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.unitPrice ?? ""}
+                      onChange={(event) =>
+                        updateCandidate(item.id, {
+                          unitPrice:
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="auth-field">
+                    <span>Line price</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.linePrice ?? ""}
+                      onChange={(event) =>
+                        updateCandidate(item.id, {
+                          linePrice:
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="add-item-form__row">
+                  <label className="auth-field">
                     <span>Location</span>
                     <select
                       value={item.suggestedLocation}
                       onChange={(event) =>
                         updateCandidate(item.id, {
-                          suggestedLocation: event.target
-                            .value as LocationType,
+                          suggestedLocation: event.target.value as LocationType,
                         })
                       }
                     >
@@ -332,6 +434,22 @@ export function GroceryImportFlow({
                     </select>
                   </label>
                 </div>
+
+                <label className="hb-check">
+                  <input
+                    type="checkbox"
+                    checked={item.isFood}
+                    onChange={(event) =>
+                      updateCandidate(item.id, {
+                        isFood: event.target.checked,
+                        selected: event.target.checked
+                          ? item.selected !== false
+                          : item.selected,
+                      })
+                    }
+                  />
+                  Food item (for kitchen inventory)
+                </label>
 
                 {duplicates.length > 0 ? (
                   <label className="auth-field">
@@ -363,10 +481,6 @@ export function GroceryImportFlow({
                       })}
                     </select>
                   </label>
-                ) : null}
-
-                {item.needsReview ? (
-                  <p className="confidence-pill">Needs review</p>
                 ) : null}
               </article>
             );

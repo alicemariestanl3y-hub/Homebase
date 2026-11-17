@@ -56,13 +56,26 @@ create table public.grocery_imports (
     fulfillment in ('ordered', 'delivered', 'mixed', 'unknown')
   ),
   retailer text,
+  -- Stable retailer code for parsers (e.g. woolworths_au).
+  retailer_code text,
   order_reference text,
+  currency text not null default 'AUD',
+  order_total numeric,
+  -- Future dedicated inbox / forwarding (not wired in this increment).
+  email_message_id text,
+  email_from text,
+  requires_approval boolean not null default false,
+  approved_at timestamptz,
   notes text,
   actor_user_id uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now(),
   imported_at timestamptz,
   unique (household_id, content_hash)
 );
+
+create unique index grocery_imports_email_message_unique
+  on public.grocery_imports (household_id, email_message_id)
+  where email_message_id is not null;
 
 create index grocery_imports_household_created_idx
   on public.grocery_imports (household_id, created_at desc);
@@ -71,19 +84,28 @@ create table public.grocery_import_lines (
   id uuid primary key default gen_random_uuid(),
   import_id uuid not null references public.grocery_imports (id) on delete cascade,
   household_id uuid not null references public.households (id) on delete cascade,
+  -- Preserve retailer wording; standardized_name is for recipe matching.
   name text not null,
+  original_name text,
+  standardized_name text,
   brand text,
   package_size text,
   quantity numeric not null check (quantity >= 0),
   unit text not null check (
     unit in ('g', 'kg', 'ml', 'L', 'pieces', 'packets', 'bottles', 'cans')
   ),
+  unit_price numeric,
+  line_price numeric,
+  currency text not null default 'AUD',
   suggested_location text not null check (
     suggested_location in ('pantry', 'fridge', 'freezer')
   ),
   line_fulfillment text not null default 'delivered' check (
     line_fulfillment in ('ordered', 'delivered')
   ),
+  is_food boolean not null default true,
+  was_substituted boolean not null default false,
+  substitution_note text,
   confidence text not null default 'medium' check (
     confidence in ('high', 'medium', 'low')
   ),
@@ -98,6 +120,29 @@ create table public.grocery_import_lines (
 
 create index grocery_import_lines_import_idx
   on public.grocery_import_lines (import_id, sort_order);
+
+-- Future HomeBase inbox for automatic retailer emails (schema only).
+create table public.grocery_email_inbox (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references public.households (id) on delete cascade,
+  message_id text not null,
+  from_address text,
+  subject text,
+  received_at timestamptz not null default now(),
+  retailer_code text,
+  raw_html text,
+  raw_text text,
+  parse_status text not null default 'pending' check (
+    parse_status in ('pending', 'parsed', 'needs_approval', 'imported', 'ignored', 'failed')
+  ),
+  import_id uuid references public.grocery_imports (id) on delete set null,
+  error text,
+  created_at timestamptz not null default now(),
+  unique (household_id, message_id)
+);
+
+create index grocery_email_inbox_household_received_idx
+  on public.grocery_email_inbox (household_id, received_at desc);
 
 -- ---------------------------------------------------------------------------
 -- Family recipe library
@@ -244,6 +289,7 @@ alter table public.ingredient_keys enable row level security;
 alter table public.ingredient_aliases enable row level security;
 alter table public.grocery_imports enable row level security;
 alter table public.grocery_import_lines enable row level security;
+alter table public.grocery_email_inbox enable row level security;
 alter table public.recipes enable row level security;
 alter table public.recipe_ingredients enable row level security;
 alter table public.meal_plans enable row level security;
@@ -350,6 +396,12 @@ create policy "grocery_import_lines_delete_member"
   on public.grocery_import_lines for delete
   to authenticated
   using (public.is_household_member(household_id));
+
+create policy "grocery_email_inbox_all_member"
+  on public.grocery_email_inbox for all
+  to authenticated
+  using (public.is_household_member(household_id))
+  with check (public.is_household_member(household_id));
 
 create policy "recipes_select_member"
   on public.recipes for select

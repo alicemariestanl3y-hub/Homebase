@@ -114,7 +114,7 @@ export async function performSaveGroceryImport(
       if (existing?.status === "imported") {
         return {
           error:
-            "This order/list looks like it was already imported. Change the list or mark items carefully to avoid doubles.",
+            "This Woolworths/order list looks like it was already imported. Avoid double-counting stock.",
           savedCount: 0,
           importId: existing.id,
           duplicate: true,
@@ -133,7 +133,13 @@ export async function performSaveGroceryImport(
             status: "imported",
             fulfillment: payload.fulfillment,
             retailer: payload.retailer ?? null,
+            retailer_code: payload.retailerCode ?? null,
             order_reference: payload.orderReference ?? null,
+            currency: payload.currency ?? "AUD",
+            order_total: payload.orderTotal ?? null,
+            email_message_id: payload.emailMessageId ?? null,
+            requires_approval: Boolean(payload.requiresApproval),
+            approved_at: new Date().toISOString(),
             actor_user_id: user?.id ?? null,
             imported_at: new Date().toISOString(),
           },
@@ -147,7 +153,6 @@ export async function performSaveGroceryImport(
       }
       importId = insertedImport.id;
 
-      // Replace draft lines for this import.
       await supabase
         .from("grocery_import_lines")
         .delete()
@@ -162,9 +167,12 @@ export async function performSaveGroceryImport(
       }
       if (!Number.isFinite(item.quantity) || item.quantity <= 0) continue;
 
-      // Only persist delivered lines into inventory by default; ordered-only
-      // lines stay on the import record for later delivery confirmation.
       const shouldStock = item.lineFulfillment !== "ordered";
+      const inventoryName = (
+        item.standardizedName ||
+        item.originalName ||
+        item.name
+      ).trim();
 
       if (mode === "live" && importId) {
         const supabase = await createClient();
@@ -174,12 +182,20 @@ export async function performSaveGroceryImport(
             import_id: importId,
             household_id: household.householdId,
             name: item.name.trim(),
+            original_name: item.originalName ?? item.name.trim(),
+            standardized_name: item.standardizedName ?? inventoryName,
             brand: item.brand,
             package_size: item.packageSize,
             quantity: item.quantity,
             unit: item.unit,
+            unit_price: item.unitPrice,
+            line_price: item.linePrice,
+            currency: item.currency || "AUD",
             suggested_location: item.suggestedLocation,
             line_fulfillment: item.lineFulfillment,
+            is_food: item.isFood !== false,
+            was_substituted: Boolean(item.wasSubstituted),
+            substitution_note: item.substitutionNote,
             confidence: item.confidence,
             needs_review: item.needsReview,
             selected: true,
@@ -201,7 +217,9 @@ export async function performSaveGroceryImport(
           (row) => row.id === item.mergeWithItemId,
         );
         if (!existing) {
-          throw new Error(`Could not find inventory item to merge: ${item.name}`);
+          throw new Error(
+            `Could not find inventory item to merge: ${item.name}`,
+          );
         }
         const locationType =
           snapshot?.locations.find((loc) => loc.id === existing.locationId)
@@ -218,15 +236,24 @@ export async function performSaveGroceryImport(
         });
       } else {
         const noteParts = [
+          item.originalName && item.originalName !== inventoryName
+            ? `Woolworths: ${item.originalName}`
+            : null,
           item.brand ? `Brand: ${item.brand}` : null,
           item.packageSize ? `Pack: ${item.packageSize}` : null,
+          item.linePrice != null
+            ? `Paid $${item.linePrice.toFixed(2)} ${item.currency || "AUD"}`
+            : null,
+          item.wasSubstituted
+            ? `Substitution${item.substitutionNote ? `: ${item.substitutionNote}` : ""}`
+            : null,
           item.notes,
           "Added via Grocery Import",
         ].filter(Boolean);
         await repo.addItem({
           householdId: household.householdId,
           locationType: item.suggestedLocation,
-          name: item.name.trim(),
+          name: inventoryName,
           quantity: item.quantity,
           unit: item.unit as InventoryUnit,
           expiresOn: null,
@@ -247,7 +274,7 @@ export async function performSaveGroceryImport(
   if (savedCount === 0) {
     return {
       error:
-        "No delivered items were saved. Mark lines as delivered, or check name/unit/location.",
+        "No delivered items were saved. Include food lines marked delivered, or check name/unit/location.",
       savedCount: 0,
       importId,
       duplicate: false,

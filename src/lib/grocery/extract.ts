@@ -3,10 +3,18 @@ import { INVENTORY_UNITS } from "@/lib/inventory/units";
 import type { InventoryUnit, LocationType } from "@/lib/inventory/types";
 import { toIngredientKey } from "@/lib/ingredients/matching";
 import { hashGroceryContent } from "./hash";
+import {
+  detectWoolworthsContent,
+  isLikelyNonFood,
+  parseWoolworthsEmail,
+  standardizeWoolworthsName,
+  WOOLWORTHS_RETAILER_CODE,
+} from "./retailers/woolworths";
 import type {
   GroceryCandidate,
   GroceryFulfillment,
   GroceryLineFulfillment,
+  GroceryRetailerCode,
   GrocerySourceType,
 } from "./types";
 
@@ -14,12 +22,19 @@ const MODEL = "gpt-4o-mini";
 
 type RawLine = {
   name?: string;
+  originalName?: string | null;
+  standardizedName?: string | null;
   brand?: string | null;
   packageSize?: string | null;
   quantity?: number | null;
   unit?: string | null;
+  unitPrice?: number | null;
+  linePrice?: number | null;
   suggestedLocation?: string | null;
   lineFulfillment?: string | null;
+  isFood?: boolean | null;
+  wasSubstituted?: boolean | null;
+  substitutionNote?: string | null;
   confidence?: string | null;
   needsReview?: boolean | null;
   notes?: string | null;
@@ -29,20 +44,33 @@ type RawExtract = {
   retailer?: string | null;
   orderReference?: string | null;
   fulfillment?: string | null;
+  orderTotal?: number | null;
   items?: RawLine[];
 };
 
-const SYSTEM_PROMPT = `You extract itemised grocery order / receipt lines for a household inventory app.
+const SYSTEM_PROMPT = `You extract itemised grocery order / receipt lines for a household inventory app (Australia).
+
+Woolworths Australia emails often use an HTML table with columns:
+Item description | Unit price | Qty | Price
+Descriptions may wrap onto multiple lines (name then pack size). Join those into one product.
 
 Rules:
-- Only report products explicitly present in the provided text or images.
-- Never invent products, quantities, brands, pack sizes or prices.
-- If quantity/unit is unclear, set quantity to 1 and unit to "pieces", and mark needsReview true with confidence "low".
+- Only report products explicitly present. Never invent products, pack sizes, brands, prices or expiry dates.
+- Preserve originalName exactly as printed (joined multi-line text).
+- Also provide standardizedName: a cleaner ingredient-style name for recipe matching (drop marketing fluff, keep product identity).
+- Extract unitPrice and linePrice as numbers when shown (no currency symbol). currency is AUD for Woolworths.
+- If quantity/unit is unclear, quantity=1, unit="pieces", needsReview=true, confidence="low".
 - unit must be one of: g, kg, ml, L, pieces, packets, bottles, cans.
-- suggestedLocation must be one of: pantry, fridge, freezer.
-- lineFulfillment: "delivered" when the receipt/order shows the item was received/paid; "ordered" when it is only on an order list / pending. If unclear, use "delivered" for receipts and "ordered" for order confirmations, and mark needsReview.
+- suggestedLocation: pantry | fridge | freezer.
+- isFood: false for cleaning, toiletries, bags, pet non-food, magazines, etc. Non-food should still be listed.
+- wasSubstituted: true when the line indicates a substitution.
+- lineFulfillment: delivered for receipts / completed orders; ordered for pending confirmations.
 - fulfillment (order-level): ordered | delivered | mixed | unknown.
-- Return JSON only: { "retailer": string|null, "orderReference": string|null, "fulfillment": "...", "items": [ ... ] }`;
+- Return JSON only:
+  { "retailer": string|null, "orderReference": string|null, "fulfillment": "...", "orderTotal": number|null,
+    "items": [{ "name", "originalName", "standardizedName", "brand", "packageSize", "quantity", "unit",
+      "unitPrice", "linePrice", "suggestedLocation", "lineFulfillment", "isFood", "wasSubstituted",
+      "substitutionNote", "confidence", "needsReview", "notes" }] }`;
 
 function asUnit(value: string | null | undefined): InventoryUnit {
   if (value && (INVENTORY_UNITS as readonly string[]).includes(value)) {
@@ -85,43 +113,70 @@ function asFulfillment(value: string | null | undefined): GroceryFulfillment {
   return "unknown";
 }
 
+function asMoney(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return Math.round(value * 100) / 100;
+}
+
 export function mapGroceryItems(
   raw: RawLine[],
   defaultLineFulfillment: GroceryLineFulfillment = "delivered",
 ): GroceryCandidate[] {
   return raw
     .map((item, index) => {
-      const name = (item.name ?? "").trim();
-      if (!name) return null;
+      const originalName = (item.originalName ?? item.name ?? "").trim();
+      if (!originalName) return null;
+      const standardizedName = (
+        item.standardizedName ??
+        standardizeWoolworthsName(originalName)
+      ).trim();
       const confidence = asConfidence(item.confidence);
       const quantity =
         typeof item.quantity === "number" && item.quantity > 0
           ? item.quantity
           : 1;
       const unit = asUnit(item.unit);
+      const isFood =
+        typeof item.isFood === "boolean"
+          ? item.isFood
+          : !isLikelyNonFood(originalName);
       const needsReview =
         item.needsReview === true ||
         confidence !== "high" ||
+        !isFood ||
         !(typeof item.quantity === "number" && item.quantity > 0) ||
-        !(item.unit && (INVENTORY_UNITS as readonly string[]).includes(item.unit));
+        !(
+          item.unit &&
+          (INVENTORY_UNITS as readonly string[]).includes(item.unit)
+        );
 
       const candidate: GroceryCandidate = {
         id: `groc_${index}_${crypto.randomUUID().slice(0, 8)}`,
-        name,
+        name: originalName,
+        originalName,
+        standardizedName,
         brand: item.brand?.trim() || null,
         packageSize: item.packageSize?.trim() || null,
         quantity,
         unit,
+        unitPrice: asMoney(item.unitPrice),
+        linePrice: asMoney(item.linePrice),
+        currency: "AUD",
         suggestedLocation: asLocation(item.suggestedLocation),
         lineFulfillment: asLineFulfillment(
           item.lineFulfillment,
           defaultLineFulfillment,
         ),
+        isFood,
+        wasSubstituted: item.wasSubstituted === true,
+        substitutionNote: item.substitutionNote?.trim() || null,
         confidence,
         needsReview,
         notes: item.notes?.trim() || null,
-        ingredientKey: toIngredientKey(name),
-        selected: true,
+        ingredientKey: toIngredientKey(standardizedName || originalName),
+        selected: isFood,
         mergeWithItemId: null,
       };
       return candidate;
@@ -136,7 +191,7 @@ export function contentHashFromCandidates(
   const lines = candidates
     .map(
       (item) =>
-        `${item.name}|${item.quantity}|${item.unit}|${item.brand ?? ""}|${item.packageSize ?? ""}`,
+        `${item.originalName ?? item.name}|${item.quantity}|${item.unit}|${item.linePrice ?? ""}|${item.packageSize ?? ""}`,
     )
     .sort();
   return hashGroceryContent([...extra, ...lines]);
@@ -145,8 +200,10 @@ export function contentHashFromCandidates(
 export function contentHashFromRawInput(input: {
   text?: string;
   imageFingerprints?: string[];
+  orderReference?: string | null;
 }): string {
   return hashGroceryContent([
+    input.orderReference ?? "",
     input.text ?? "",
     ...(input.imageFingerprints ?? []),
   ]);
@@ -155,6 +212,19 @@ export function contentHashFromRawInput(input: {
 export function fingerprintDataUrl(dataUrl: string): string {
   return createHash("sha256").update(dataUrl.slice(0, 5000)).digest("hex");
 }
+
+export type GroceryExtractResult = {
+  candidates: GroceryCandidate[];
+  fulfillment: GroceryFulfillment;
+  retailer: string | null;
+  retailerCode: GroceryRetailerCode | null;
+  orderReference: string | null;
+  currency: string;
+  orderTotal: number | null;
+  contentHash: string;
+  model: string | null;
+  parser: "woolworths_html" | "openai_vision" | "openai_text";
+};
 
 async function callOpenAiJson(args: {
   apiKey: string;
@@ -204,23 +274,38 @@ export async function extractGroceryFromText(args: {
   apiKey: string;
   text: string;
   sourceType: GrocerySourceType;
-}): Promise<{
-  candidates: GroceryCandidate[];
-  fulfillment: GroceryFulfillment;
-  retailer: string | null;
-  orderReference: string | null;
-  contentHash: string;
-  model: string;
-}> {
+}): Promise<GroceryExtractResult> {
   const trimmed = args.text.trim();
   if (!trimmed) throw new Error("Paste an itemised grocery list first.");
+
+  // Deterministic Woolworths path — no AI inventing pack sizes/prices.
+  if (detectWoolworthsContent(trimmed)) {
+    const parsed = parseWoolworthsEmail(trimmed);
+    if (parsed.candidates.length > 0) {
+      return {
+        candidates: parsed.candidates,
+        fulfillment: parsed.fulfillment,
+        retailer: parsed.retailer,
+        retailerCode: WOOLWORTHS_RETAILER_CODE,
+        orderReference: parsed.orderReference,
+        currency: parsed.currency,
+        orderTotal: parsed.orderTotal,
+        contentHash: contentHashFromRawInput({
+          text: trimmed,
+          orderReference: parsed.orderReference,
+        }),
+        model: null,
+        parser: "woolworths_html",
+      };
+    }
+  }
 
   const raw = await callOpenAiJson({
     apiKey: args.apiKey,
     userContent: [
       {
         type: "text",
-        text: `Source type: ${args.sourceType}\n\nGrocery list / receipt text:\n${trimmed.slice(0, 20000)}`,
+        text: `Source type: ${args.sourceType}\n\nGrocery list / receipt / email HTML or text:\n${trimmed.slice(0, 40000)}`,
       },
     ],
   });
@@ -230,18 +315,26 @@ export async function extractGroceryFromText(args: {
       ? "ordered"
       : "delivered";
   const candidates = mapGroceryItems(raw.items ?? [], defaultLine);
-  const fulfillment = asFulfillment(raw.fulfillment);
-  const contentHash = contentHashFromRawInput({
-    text: trimmed,
-  });
+  const retailerCode: GroceryRetailerCode | null = detectWoolworthsContent(
+    `${raw.retailer ?? ""}\n${trimmed}`,
+  )
+    ? WOOLWORTHS_RETAILER_CODE
+    : "other";
 
   return {
     candidates,
-    fulfillment,
+    fulfillment: asFulfillment(raw.fulfillment),
     retailer: raw.retailer?.trim() || null,
+    retailerCode,
     orderReference: raw.orderReference?.trim() || null,
-    contentHash,
+    currency: "AUD",
+    orderTotal: asMoney(raw.orderTotal),
+    contentHash: contentHashFromRawInput({
+      text: trimmed,
+      orderReference: raw.orderReference,
+    }),
     model: MODEL,
+    parser: "openai_text",
   };
 }
 
@@ -249,14 +342,7 @@ export async function extractGroceryFromImages(args: {
   apiKey: string;
   images: string[];
   sourceType: GrocerySourceType;
-}): Promise<{
-  candidates: GroceryCandidate[];
-  fulfillment: GroceryFulfillment;
-  retailer: string | null;
-  orderReference: string | null;
-  contentHash: string;
-  model: string;
-}> {
+}): Promise<GroceryExtractResult> {
   if (args.images.length === 0) {
     throw new Error("Add at least one screenshot or photo.");
   }
@@ -266,7 +352,7 @@ export async function extractGroceryFromImages(args: {
     userContent: [
       {
         type: "text",
-        text: `Source type: ${args.sourceType}. Extract every line item visible on these grocery order / receipt images.`,
+        text: `Source type: ${args.sourceType}. This may be a Woolworths Australia order email screenshot with columns Item description, Unit price, Qty, Price. Join wrapped product names. Extract every line. Never invent pack sizes or expiry.`,
       },
       ...args.images.map((url) => ({
         type: "image_url" as const,
@@ -276,17 +362,22 @@ export async function extractGroceryFromImages(args: {
   });
 
   const candidates = mapGroceryItems(raw.items ?? [], "delivered");
-  const contentHash = contentHashFromRawInput({
-    imageFingerprints: args.images.map(fingerprintDataUrl),
-  });
-
   return {
     candidates,
     fulfillment: asFulfillment(raw.fulfillment),
     retailer: raw.retailer?.trim() || null,
+    retailerCode: detectWoolworthsContent(raw.retailer ?? "")
+      ? WOOLWORTHS_RETAILER_CODE
+      : "other",
     orderReference: raw.orderReference?.trim() || null,
-    contentHash,
+    currency: "AUD",
+    orderTotal: asMoney(raw.orderTotal),
+    contentHash: contentHashFromRawInput({
+      imageFingerprints: args.images.map(fingerprintDataUrl),
+      orderReference: raw.orderReference,
+    }),
     model: MODEL,
+    parser: "openai_vision",
   };
 }
 
