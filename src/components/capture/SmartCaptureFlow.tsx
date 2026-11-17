@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { filesToResizedDataUrls } from "@/lib/capture/client-resize";
@@ -152,6 +153,14 @@ export function SmartCaptureFlow({
             ? "Take or upload shelf photos. We’ll resize them, identify products, then let you approve everything."
             : "Correct uncertain items, merge duplicates, and only then save to your household inventory."}
         </p>
+        {step === "photos" ? (
+          <p style={{ margin: "0.65rem 0 0", fontSize: "0.9rem" }}>
+            Importing an online order instead?{" "}
+            <Link href="/grocery" style={{ textDecoration: "underline" }}>
+              Open grocery import
+            </Link>
+          </p>
+        ) : null}
       </div>
 
       {error ? <p className="auth-error">{error}</p> : null}
