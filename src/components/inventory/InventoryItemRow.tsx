@@ -1,12 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
-  consumeInventoryItem,
-  deleteInventoryItem,
-  updateInventoryItem,
-  type MutationState,
-} from "@/app/actions/inventory";
+  consumeInventoryItemClient,
+  deleteInventoryItemClient,
+  updateInventoryItemClient,
+} from "@/lib/inventory/client-mutations";
 import { LOCATION_LABELS, LOCATION_ORDER } from "@/lib/inventory/labels";
 import {
   formatQuantity,
@@ -21,28 +21,17 @@ type InventoryItemRowProps = {
   locationType: LocationType;
 };
 
-const initialState: MutationState = { error: null, ok: false };
-
 export function InventoryItemRow({
   item,
   index,
   locationType,
 }: InventoryItemRowProps) {
+  const router = useRouter();
   const [mode, setMode] = useState<"view" | "edit" | "use">("view");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [updateState, updateAction, updatePending] = useActionState(
-    updateInventoryItem,
-    initialState,
-  );
-  const [consumeState, consumeAction, consumePending] = useActionState(
-    consumeInventoryItem,
-    initialState,
-  );
-  const [deleteState, deleteAction, deletePending] = useActionState(
-    deleteInventoryItem,
-    initialState,
-  );
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     function onDocClick(event: MouseEvent) {
@@ -53,6 +42,23 @@ export function InventoryItemRow({
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, []);
+
+  function runMutation(
+    action: (formData: FormData) => Promise<{ error: string | null; ok: boolean }>,
+    formData: FormData,
+    onSuccess?: () => void,
+  ) {
+    setError(null);
+    startTransition(async () => {
+      const result = await action(formData);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      onSuccess?.();
+      router.refresh();
+    });
+  }
 
   return (
     <li
@@ -115,15 +121,22 @@ export function InventoryItemRow({
             >
               Edit
             </button>
-            <form action={deleteAction}>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const formData = new FormData(event.currentTarget);
+                runMutation(deleteInventoryItemClient, formData);
+                setMenuOpen(false);
+              }}
+            >
               <input type="hidden" name="itemId" value={item.id} />
               <button
                 type="submit"
                 className="danger"
                 role="menuitem"
-                disabled={deletePending}
+                disabled={pending}
               >
-                {deletePending ? "Removing…" : "Remove"}
+                {pending ? "Removing…" : "Remove"}
               </button>
             </form>
           </div>
@@ -131,7 +144,16 @@ export function InventoryItemRow({
       </div>
 
       {mode === "use" ? (
-        <form className="item-inline-form" action={consumeAction}>
+        <form
+          className="item-inline-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData(event.currentTarget);
+            runMutation(consumeInventoryItemClient, formData, () =>
+              setMode("view"),
+            );
+          }}
+        >
           <input type="hidden" name="itemId" value={item.id} />
           <label className="auth-field">
             <span>Amount used</span>
@@ -146,14 +168,16 @@ export function InventoryItemRow({
               defaultValue={Math.min(1, item.quantity)}
             />
           </label>
-          {consumeState.error ? (
-            <p className="auth-error">{consumeState.error}</p>
-          ) : null}
+          {error ? <p className="auth-error">{error}</p> : null}
           <div className="inventory-row__actions">
-            <button type="submit" className="row-action" disabled={consumePending}>
-              {consumePending ? "Saving…" : "Confirm use"}
+            <button type="submit" className="row-action" disabled={pending}>
+              {pending ? "Saving…" : "Confirm use"}
             </button>
-            <button type="button" className="row-action" onClick={() => setMode("view")}>
+            <button
+              type="button"
+              className="row-action"
+              onClick={() => setMode("view")}
+            >
               Cancel
             </button>
           </div>
@@ -161,7 +185,16 @@ export function InventoryItemRow({
       ) : null}
 
       {mode === "edit" ? (
-        <form className="item-inline-form" action={updateAction}>
+        <form
+          className="item-inline-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData(event.currentTarget);
+            runMutation(updateInventoryItemClient, formData, () =>
+              setMode("view"),
+            );
+          }}
+        >
           <input type="hidden" name="itemId" value={item.id} />
           <label className="auth-field">
             <span>Name</span>
@@ -203,27 +236,35 @@ export function InventoryItemRow({
           </label>
           <label className="auth-field">
             <span>Expiry (optional)</span>
-            <input name="expiresOn" type="date" defaultValue={item.expiresOn ?? ""} />
+            <input
+              name="expiresOn"
+              type="date"
+              defaultValue={item.expiresOn ?? ""}
+            />
           </label>
           <label className="auth-field">
             <span>Notes (optional)</span>
             <input name="notes" type="text" defaultValue={item.notes ?? ""} />
           </label>
-          {updateState.error ? (
-            <p className="auth-error">{updateState.error}</p>
-          ) : null}
+          {error ? <p className="auth-error">{error}</p> : null}
           <div className="inventory-row__actions">
-            <button type="submit" className="row-action" disabled={updatePending}>
-              {updatePending ? "Saving…" : "Save"}
+            <button type="submit" className="row-action" disabled={pending}>
+              {pending ? "Saving…" : "Save"}
             </button>
-            <button type="button" className="row-action" onClick={() => setMode("view")}>
+            <button
+              type="button"
+              className="row-action"
+              onClick={() => setMode("view")}
+            >
               Cancel
             </button>
           </div>
         </form>
       ) : null}
 
-      {deleteState.error ? <p className="auth-error">{deleteState.error}</p> : null}
+      {mode === "view" && error ? (
+        <p className="auth-error">{error}</p>
+      ) : null}
     </li>
   );
 }
