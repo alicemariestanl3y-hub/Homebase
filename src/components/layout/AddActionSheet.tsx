@@ -8,19 +8,24 @@ type AddActionSheetProps = {
   onClose: () => void;
 };
 
+function freshHref(path: string): string {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}fresh=${Date.now()}`;
+}
+
 const ACTIONS = [
   {
-    href: "/capture",
+    path: "/capture",
     title: "Photograph shelves",
     description: "Smart Capture from pantry, fridge or freezer photos.",
   },
   {
-    href: "/grocery",
+    path: "/grocery",
     title: "Import grocery order",
     description: "Paste a Woolworths email or upload receipt screenshots.",
   },
   {
-    href: "/inventory?add=1",
+    path: "/inventory?add=1",
     title: "Add item manually",
     description: "Type a product into your household inventory.",
   },
@@ -81,9 +86,9 @@ export function AddActionSheet({ open, onClose }: AddActionSheetProps) {
         </div>
         <ul className="hb-sheet__list">
           {ACTIONS.map((action) => (
-            <li key={action.href}>
+            <li key={action.path}>
               <Link
-                href={action.href}
+                href={freshHref(action.path)}
                 className="hb-sheet__action"
                 onClick={onClose}
               >

@@ -10,8 +10,20 @@ import {
 import { getCurrentHouseholdId } from "@/lib/inventory/supabase-repository";
 import type { InventoryItem, LocationType } from "@/lib/inventory/types";
 
-async function CaptureContent() {
+type CapturePageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function firstParam(
+  value: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+async function CaptureContent({ searchParams }: CapturePageProps) {
   await connection();
+  const params = (await searchParams) ?? {};
+  const visitKey = firstParam(params.fresh) ?? "capture";
   const mode = getInventoryMode();
   const householdId =
     mode === "live" ? await getCurrentHouseholdId() : getDemoHouseholdId();
@@ -32,6 +44,7 @@ async function CaptureContent() {
   return (
     <AppShell showSignOut={mode === "live"}>
       <SmartCaptureFlow
+        key={visitKey}
         existingItems={existingItems}
         locationById={locationById}
       />
@@ -39,7 +52,7 @@ async function CaptureContent() {
   );
 }
 
-export default function CapturePage() {
+export default function CapturePage(props: CapturePageProps) {
   return (
     <Suspense
       fallback={
@@ -48,7 +61,7 @@ export default function CapturePage() {
         </AppShell>
       }
     >
-      <CaptureContent />
+      <CaptureContent searchParams={props.searchParams} />
     </Suspense>
   );
 }

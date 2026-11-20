@@ -186,7 +186,7 @@ export function GroceryImportFlow({
           setError(result.error || `Save failed (${response.status}).`);
           return;
         }
-        router.push("/");
+        router.push("/inventory");
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Network error.");
@@ -332,15 +332,22 @@ export function GroceryImportFlow({
                   <label className="auth-field">
                     <span>Qty</span>
                     <input
-                      type="number"
-                      min="0.1"
-                      step="any"
-                      value={item.quantity}
-                      onChange={(event) =>
-                        updateCandidate(item.id, {
-                          quantity: Number(event.target.value),
-                        })
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={
+                        Number.isFinite(item.quantity) && item.quantity > 0
+                          ? String(item.quantity)
+                          : ""
                       }
+                      placeholder=""
+                      onChange={(event) => {
+                        const raw = event.target.value.replace(",", ".");
+                        if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) return;
+                        updateCandidate(item.id, {
+                          quantity: raw === "" ? 0 : Number(raw),
+                        });
+                      }}
                     />
                   </label>
                   <label className="auth-field">
@@ -490,7 +497,14 @@ export function GroceryImportFlow({
             <button
               type="button"
               className="hb-btn hb-btn--ghost"
-              onClick={() => setStep("source")}
+              onClick={() => {
+                setStep("source");
+                setCandidates([]);
+                setPreviews([]);
+                setPastedText("");
+                setError(null);
+                setInfo(null);
+              }}
             >
               Back
             </button>

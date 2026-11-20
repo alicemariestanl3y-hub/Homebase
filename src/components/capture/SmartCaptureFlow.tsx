@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { filesToResizedDataUrls } from "@/lib/capture/client-resize";
 import { findDuplicateMatches } from "@/lib/capture/duplicates";
@@ -29,6 +29,24 @@ export function SmartCaptureFlow({
   const [info, setInfo] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const resetToPhotos = useCallback(() => {
+    setStep("photos");
+    setPreviews([]);
+    setCandidates([]);
+    setError(null);
+    setInfo(null);
+    setAnalyzing(false);
+  }, []);
+
+  // iOS/Safari bfcache can restore a frozen review screen when revisiting.
+  useEffect(() => {
+    function onPageShow(event: PageTransitionEvent) {
+      if (event.persisted) resetToPhotos();
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [resetToPhotos]);
 
   const locationMap = useMemo(
     () => new Map(Object.entries(locationById)) as Map<string, LocationType>,
@@ -131,7 +149,8 @@ export function SmartCaptureFlow({
           return;
         }
 
-        router.push("/");
+        resetToPhotos();
+        router.push("/inventory");
         router.refresh();
       } catch (err) {
         setError(
@@ -273,15 +292,23 @@ export function SmartCaptureFlow({
                     <label className="auth-field">
                       <span>Qty</span>
                       <input
-                        type="number"
-                        min="0.1"
-                        step="any"
-                        value={candidate.quantity}
-                        onChange={(event) =>
-                          updateCandidate(candidate.id, {
-                            quantity: Number(event.target.value),
-                          })
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={
+                          Number.isFinite(candidate.quantity) &&
+                          candidate.quantity > 0
+                            ? String(candidate.quantity)
+                            : ""
                         }
+                        placeholder=""
+                        onChange={(event) => {
+                          const raw = event.target.value.replace(",", ".");
+                          if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) return;
+                          updateCandidate(candidate.id, {
+                            quantity: raw === "" ? 0 : Number(raw),
+                          });
+                        }}
                       />
                     </label>
                     <label className="auth-field">
@@ -371,10 +398,7 @@ export function SmartCaptureFlow({
           <button
             type="button"
             className="hb-btn hb-btn--ghost"
-            onClick={() => {
-              setStep("photos");
-              setCandidates([]);
-            }}
+            onClick={resetToPhotos}
           >
             Back to photos
           </button>
