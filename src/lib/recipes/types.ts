@@ -33,6 +33,9 @@ export type Recipe = {
   leftoverFriendly: boolean;
   dietaryTags: string[];
   variationOfRecipeId: string | null;
+  /** traditional | recipe_base | meal_kit — packet meals link a catalog product. */
+  recipeType: "traditional" | "recipe_base" | "meal_kit";
+  catalogProductId: string | null;
   ingredients: RecipeIngredient[];
   createdAt: string;
   updatedAt: string;
@@ -59,6 +62,8 @@ export type RecipeWriteInput = {
   leftoverFriendly?: boolean;
   dietaryTags?: string[];
   variationOfRecipeId?: string | null;
+  recipeType?: "traditional" | "recipe_base" | "meal_kit";
+  catalogProductId?: string | null;
   ingredients: RecipeIngredientInput[];
 };
 

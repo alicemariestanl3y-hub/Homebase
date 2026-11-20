@@ -10,6 +10,7 @@ import type {
   InventorySnapshot,
   LocationType,
 } from "@/lib/inventory/types";
+import { CatalogClassifyPanel } from "@/components/meals/CatalogClassifyPanel";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddItemForm } from "./AddItemForm";
 import { InventoryItemRow } from "./InventoryItemRow";
@@ -104,6 +105,8 @@ export function InventoryView({
       <p className="hb-kicker" style={{ marginBottom: "0.35rem" }}>
         {snapshot.household.name}
       </p>
+
+      <CatalogClassifyPanel />
 
       <label className="hb-search hb-search--prominent">
         <span className="sr-only">Search inventory</span>

@@ -72,6 +72,8 @@ export function RecipeDetail({ recipe }: RecipeDetailProps) {
           leftoverFriendly: recipe.leftoverFriendly,
           dietaryTags: recipe.dietaryTags,
           variationOfRecipeId: recipe.id,
+          recipeType: recipe.recipeType,
+          catalogProductId: recipe.catalogProductId,
           ingredients: scaled.map((ingredient) => ({
             name: ingredient.name,
             quantity: ingredient.scaledQuantity,
@@ -105,6 +107,12 @@ export function RecipeDetail({ recipe }: RecipeDetailProps) {
       </p>
 
       <div className="recipe-card__flags" style={{ margin: "0.75rem 0" }}>
+        {recipe.recipeType === "recipe_base" ? (
+          <span className="hb-pill">Recipe base</span>
+        ) : null}
+        {recipe.recipeType === "meal_kit" ? (
+          <span className="hb-pill">Meal kit</span>
+        ) : null}
         {recipe.isFavourite ? <span className="hb-pill">Favourite</span> : null}
         {recipe.freezerSuitable ? <span className="hb-pill">Freezer</span> : null}
         {recipe.leftoverFriendly ? (
