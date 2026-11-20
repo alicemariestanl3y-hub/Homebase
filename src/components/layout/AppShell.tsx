@@ -3,6 +3,7 @@ import { BottomNav } from "./BottomNav";
 
 type AppShellProps = {
   children: React.ReactNode;
+  /** Kept for call-site compatibility; sign-out is on Account. */
   showSignOut?: boolean;
   showBottomNav?: boolean;
   hero?: React.ReactNode;
@@ -10,13 +11,12 @@ type AppShellProps = {
 
 export function AppShell({
   children,
-  showSignOut = false,
   showBottomNav = true,
   hero,
 }: AppShellProps) {
   return (
     <div className="hb-app">
-      <AppHeader showSignOut={showSignOut} />
+      <AppHeader />
       {hero}
       <div className="hb-app__body">{children}</div>
       {showBottomNav ? <BottomNav /> : null}

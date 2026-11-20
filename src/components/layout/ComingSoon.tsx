@@ -15,7 +15,7 @@ export function ComingSoon({
         <h1>{title}</h1>
         <p>{description}</p>
         <Link href="/" className="hb-btn" style={{ display: "inline-block", marginTop: "1rem" }}>
-          Back to inventory
+          Back to home
         </Link>
       </section>
     </AppShell>

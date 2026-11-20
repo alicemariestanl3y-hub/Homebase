@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LOCATION_ORDER } from "@/lib/inventory/labels";
 import type {
   InventoryActivity,
@@ -20,16 +19,37 @@ type InventoryViewProps = {
   initialItemsByLocation: Record<LocationType, InventoryItemView[]>;
   recentActivity: InventoryActivity[];
   mode: InventoryMode;
+  /** Open manual add from Add action sheet (?add=1). */
+  initialShowManualAdd?: boolean;
+  /** Deep-link location from home dashboard (?loc=). */
+  initialLocation?: LocationType;
 };
+
+function isLocationType(value: string | undefined): value is LocationType {
+  return value === "pantry" || value === "fridge" || value === "freezer";
+}
 
 export function InventoryView({
   snapshot,
   initialItemsByLocation,
   recentActivity,
   mode,
+  initialShowManualAdd = false,
+  initialLocation,
 }: InventoryViewProps) {
-  const [active, setActive] = useState<LocationType>("fridge");
-  const [showManualAdd, setShowManualAdd] = useState(false);
+  const [active, setActive] = useState<LocationType>(
+    isLocationType(initialLocation) ? initialLocation : "fridge",
+  );
+  const [showManualAdd, setShowManualAdd] = useState(initialShowManualAdd);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("add") === "1") setShowManualAdd(true);
+    const loc = params.get("loc") ?? undefined;
+    if (isLocationType(loc)) setActive(loc);
+  }, []);
 
   const counts = useMemo(() => {
     return LOCATION_ORDER.reduce(
@@ -41,12 +61,23 @@ export function InventoryView({
     );
   }, [initialItemsByLocation]);
 
-  const items = initialItemsByLocation[active];
+  const filtered = useMemo(() => {
+    const items = initialItemsByLocation[active];
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (item) =>
+        item.name.toLowerCase().includes(q) ||
+        (item.notes?.toLowerCase().includes(q) ?? false),
+    );
+  }, [active, initialItemsByLocation, query]);
 
   return (
     <>
       {mode === "demo" ? (
-        <p className="demo-banner">Sample data · connect Supabase for live inventory</p>
+        <p className="demo-banner">
+          Sample data · connect Supabase for live inventory
+        </p>
       ) : null}
 
       <p className="hb-kicker" style={{ marginBottom: "0.35rem" }}>
@@ -54,6 +85,19 @@ export function InventoryView({
       </p>
 
       <LocationTabs active={active} counts={counts} onChange={setActive} />
+
+      <label className="hb-search">
+        <span className="sr-only">Search inventory</span>
+        <input
+          type="search"
+          className="hb-search__input"
+          placeholder="Search items…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          autoComplete="off"
+          enterKeyHint="search"
+        />
+      </label>
 
       <section
         className="inventory-panel"
@@ -63,18 +107,21 @@ export function InventoryView({
       >
         <div className="hb-panel-head">
           <h2>
-            {items.length} item{items.length === 1 ? "" : "s"}
+            {filtered.length} item{filtered.length === 1 ? "" : "s"}
+            {query.trim() ? " found" : ""}
           </h2>
           <p className="hb-panel-meta">Soonest to expire</p>
         </div>
 
-        {items.length === 0 ? (
+        {filtered.length === 0 ? (
           <p className="hb-empty">
-            Nothing here yet. Capture a shelf photo or add an item manually.
+            {query.trim()
+              ? "No items match your search in this location."
+              : "Nothing here yet. Use Add to photograph shelves, import a grocery order, or add an item manually."}
           </p>
         ) : (
           <ul className="hb-inventory-list">
-            {items.map((item, index) => (
+            {filtered.map((item, index) => (
               <InventoryItemRow
                 key={item.id}
                 item={item}
@@ -103,12 +150,6 @@ export function InventoryView({
         </h2>
         <ActivityFeed activity={recentActivity} />
       </section>
-
-      <Link href="/capture" className="hb-fab" aria-label="Add items with camera">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-        </svg>
-      </Link>
     </>
   );
 }

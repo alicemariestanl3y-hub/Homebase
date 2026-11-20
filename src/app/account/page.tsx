@@ -10,7 +10,7 @@ async function AccountContent() {
   const mode = getInventoryMode();
 
   return (
-    <AppShell showSignOut={mode === "live"}>
+    <AppShell>
       <p className="hb-kicker">Account</p>
       <h1 className="section-title" style={{ marginTop: "0.35rem" }}>
         HomeBase settings
@@ -18,17 +18,27 @@ async function AccountContent() {
       <p style={{ color: "var(--hb-muted)", lineHeight: 1.45 }}>
         Mode: {mode === "live" ? "Live Supabase household" : "Demo sample data"}
       </p>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.75rem",
-          marginTop: "1rem",
-        }}
-      >
-        <Link href="/capture" className="hb-btn" style={{ textAlign: "center" }}>
-          Smart Inventory Capture
+      <nav className="hb-account-nav" aria-label="Secondary">
+        <Link href="/inventory" className="hb-account-nav__link">
+          Inventory
         </Link>
+        <Link href="/capture" className="hb-account-nav__link">
+          Photograph shelves
+        </Link>
+        <Link href="/grocery" className="hb-account-nav__link">
+          Import grocery order
+        </Link>
+        <Link href="/meals" className="hb-account-nav__link">
+          Meals &amp; recipes
+        </Link>
+        <Link href="/insights" className="hb-account-nav__link">
+          Insights
+        </Link>
+        <Link href="/shopping" className="hb-account-nav__link">
+          Shopping list
+        </Link>
+      </nav>
+      <div className="hb-account-actions">
         {mode === "live" ? <SignOutButton /> : null}
         {mode !== "live" ? (
           <Link
