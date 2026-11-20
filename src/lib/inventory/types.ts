@@ -50,6 +50,8 @@ export type InventoryItem = {
   /** ISO date (YYYY-MM-DD) when set — used to prioritise use-before-expiry. */
   expiresOn: string | null;
   notes: string | null;
+  /** Link to reusable catalog product identity (recipe bases / kits). */
+  catalogProductId: string | null;
   updatedAt: string;
 };
 

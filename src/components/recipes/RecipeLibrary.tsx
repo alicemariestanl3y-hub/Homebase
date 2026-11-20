@@ -76,6 +76,12 @@ export function RecipeLibrary({ recipes }: RecipeLibraryProps) {
                   </p>
                 </div>
                 <div className="recipe-card__flags">
+                  {recipe.recipeType === "recipe_base" ? (
+                    <span className="hb-pill">Recipe base</span>
+                  ) : null}
+                  {recipe.recipeType === "meal_kit" ? (
+                    <span className="hb-pill">Meal kit</span>
+                  ) : null}
                   {recipe.isFavourite ? <span className="hb-pill">Favourite</span> : null}
                   {recipe.freezerSuitable ? (
                     <span className="hb-pill">Freezer</span>

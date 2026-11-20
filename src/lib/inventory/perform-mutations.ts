@@ -78,6 +78,23 @@ export async function performAddInventoryItem(input: {
   }
 
   try {
+    let catalogProductId: string | null = null;
+    try {
+      const { upsertCatalogProduct } = await import(
+        "@/lib/packaged-meals/repository"
+      );
+      const product = await upsertCatalogProduct({
+        householdId: household.householdId,
+        displayName: name,
+        originalName: name,
+        notes,
+        sourceType: "manual",
+      });
+      catalogProductId = product.id;
+    } catch (catalogError) {
+      console.error("catalog upsert on add failed:", catalogError);
+    }
+
     await getInventoryRepository().addItem({
       householdId: household.householdId,
       locationType,
@@ -86,6 +103,7 @@ export async function performAddInventoryItem(input: {
       unit,
       expiresOn,
       notes,
+      catalogProductId,
     });
     return { error: null, ok: true };
   } catch (error) {

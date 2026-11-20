@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { AppShell } from "@/components/layout/AppShell";
+import { MealRecommendations } from "@/components/meals/MealRecommendations";
 import { RecipeLibrary } from "@/components/recipes/RecipeLibrary";
 import { resolveHouseholdIdForRequest } from "@/lib/household/resolve";
 import { getInventoryMode } from "@/lib/inventory/get-repository";
@@ -35,14 +36,15 @@ async function MealsContent() {
       hero={
         <section className="hb-hero">
           <p className="hb-hero__kicker">— Family table —</p>
-          <h1 className="hb-hero__title">Recipe library</h1>
+          <h1 className="hb-hero__title">Meals</h1>
           <p className="hb-hero__sub">
-            Favourites, variations and links — meal planning comes next.
+            Packet bases in the pantry first, then your saved recipes.
           </p>
         </section>
       }
     >
       {error ? <p className="auth-error">{error}</p> : null}
+      <MealRecommendations />
       <RecipeLibrary recipes={recipes} />
     </AppShell>
   );

@@ -40,6 +40,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "g",
       expiresOn: null,
       notes: null,
+      catalogProductId: null,
       updatedAt: "2026-11-12T08:00:00.000Z",
     },
     {
@@ -51,6 +52,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "packets",
       expiresOn: "2027-03-01",
       notes: "500g packets — weight not assumed by unit conversion",
+      catalogProductId: null,
       updatedAt: "2026-11-10T10:15:00.000Z",
     },
     {
@@ -62,6 +64,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "cans",
       expiresOn: "2026-12-20",
       notes: null,
+      catalogProductId: null,
       updatedAt: "2026-11-11T18:40:00.000Z",
     },
     {
@@ -73,6 +76,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "bottles",
       expiresOn: null,
       notes: null,
+      catalogProductId: null,
       updatedAt: "2026-11-01T09:00:00.000Z",
     },
     {
@@ -84,6 +88,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "L",
       expiresOn: "2026-11-16",
       notes: null,
+      catalogProductId: null,
       updatedAt: "2026-11-13T07:30:00.000Z",
     },
     {
@@ -95,6 +100,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "pieces",
       expiresOn: "2026-11-22",
       notes: null,
+      catalogProductId: null,
       updatedAt: "2026-11-12T19:00:00.000Z",
     },
     {
@@ -106,6 +112,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "g",
       expiresOn: "2026-12-05",
       notes: null,
+      catalogProductId: null,
       updatedAt: "2026-11-09T12:00:00.000Z",
     },
     {
@@ -117,6 +124,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "g",
       expiresOn: "2026-11-15",
       notes: "Use soon",
+      catalogProductId: null,
       updatedAt: "2026-11-13T08:10:00.000Z",
     },
     {
@@ -128,6 +136,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "g",
       expiresOn: "2027-01-30",
       notes: null,
+      catalogProductId: null,
       updatedAt: "2026-10-20T16:00:00.000Z",
     },
     {
@@ -139,6 +148,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "packets",
       expiresOn: "2026-11-28",
       notes: null,
+      catalogProductId: null,
       updatedAt: "2026-11-05T11:20:00.000Z",
     },
     {
@@ -150,6 +160,7 @@ export const SAMPLE_INVENTORY: InventorySnapshot = {
       unit: "pieces",
       expiresOn: "2026-12-01",
       notes: "Sliced",
+      catalogProductId: null,
       updatedAt: "2026-11-08T20:00:00.000Z",
     },
   ],

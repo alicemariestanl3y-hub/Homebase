@@ -28,6 +28,8 @@ export function isPublicApiPath(pathname: string): boolean {
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/inventory/") ||
     pathname.startsWith("/api/grocery/") ||
-    pathname.startsWith("/api/recipes")
+    pathname.startsWith("/api/recipes") ||
+    pathname.startsWith("/api/catalog") ||
+    pathname.startsWith("/api/packaged-meals")
   );
 }

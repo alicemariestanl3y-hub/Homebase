@@ -38,6 +38,7 @@ export type AddInventoryItemInput = {
   unit: InventoryUnit;
   expiresOn?: string | null;
   notes?: string | null;
+  catalogProductId?: string | null;
 };
 
 export type UpdateInventoryItemInput = {
@@ -144,6 +145,7 @@ export class SampleInventoryRepository implements InventoryRepository {
       unit: input.unit,
       expiresOn: input.expiresOn ?? null,
       notes: input.notes ?? null,
+      catalogProductId: input.catalogProductId ?? null,
       updatedAt: now,
     };
 
@@ -188,6 +190,7 @@ export class SampleInventoryRepository implements InventoryRepository {
       unit: input.unit,
       expiresOn: input.expiresOn ?? null,
       notes: input.notes ?? null,
+      catalogProductId: existing.catalogProductId,
       updatedAt: now,
     };
 
