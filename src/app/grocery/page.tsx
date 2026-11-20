@@ -10,8 +10,20 @@ import {
 import { getCurrentHouseholdId } from "@/lib/inventory/supabase-repository";
 import type { InventoryItem, LocationType } from "@/lib/inventory/types";
 
-async function GroceryContent() {
+type GroceryPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function firstParam(
+  value: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+async function GroceryContent({ searchParams }: GroceryPageProps) {
   await connection();
+  const params = (await searchParams) ?? {};
+  const visitKey = firstParam(params.fresh) ?? "grocery";
   const mode = getInventoryMode();
   const householdId =
     mode === "live" ? await getCurrentHouseholdId() : getDemoHouseholdId();
@@ -34,6 +46,7 @@ async function GroceryContent() {
   return (
     <AppShell showSignOut={mode === "live"}>
       <GroceryImportFlow
+        key={visitKey}
         existingItems={existingItems}
         locationById={locationById}
       />
@@ -41,7 +54,7 @@ async function GroceryContent() {
   );
 }
 
-export default function GroceryPage() {
+export default function GroceryPage(props: GroceryPageProps) {
   return (
     <Suspense
       fallback={
@@ -50,7 +63,7 @@ export default function GroceryPage() {
         </AppShell>
       }
     >
-      <GroceryContent />
+      <GroceryContent searchParams={props.searchParams} />
     </Suspense>
   );
 }
