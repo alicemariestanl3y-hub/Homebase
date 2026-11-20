@@ -1,50 +1,43 @@
 import Link from "next/link";
-import { SignOutButton } from "@/components/inventory/SignOutButton";
 
 type AppHeaderProps = {
+  /** @deprecated Sign-out lives on Account; kept for AppShell compatibility. */
   showSignOut?: boolean;
   menuHref?: string;
 };
 
-export function AppHeader({ showSignOut = false, menuHref = "/account" }: AppHeaderProps) {
+/**
+ * Consistent HomeBase brand header. Primary destinations live in BottomNav;
+ * account/settings are secondary via the trailing control.
+ */
+export function AppHeader({ menuHref = "/account" }: AppHeaderProps) {
   return (
     <header className="hb-topbar">
-      <Link href="/" className="hb-topbar__icon" aria-label="HomeBase home">
-        <HouseIcon />
-      </Link>
+      <span className="hb-topbar__spacer" aria-hidden="true" />
       <Link href="/" className="hb-topbar__brand">
         HOMEBASE
       </Link>
-      {showSignOut ? (
-        <div className="hb-topbar__menu">
-          <SignOutButton />
-        </div>
-      ) : (
-        <Link href={menuHref} className="hb-topbar__icon" aria-label="Account menu">
-          <MenuIcon />
-        </Link>
-      )}
+      <Link
+        href={menuHref}
+        className="hb-topbar__icon"
+        aria-label="Account and settings"
+      >
+        <SettingsIcon />
+      </Link>
     </header>
   );
 }
 
-function HouseIcon() {
+function SettingsIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7" />
       <path
-        d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
+        d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"
         stroke="currentColor"
         strokeWidth="1.7"
-        strokeLinejoin="round"
+        strokeLinecap="round"
       />
-    </svg>
-  );
-}
-
-function MenuIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

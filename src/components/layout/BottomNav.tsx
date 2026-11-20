@@ -2,22 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-
-const ITEMS = [
-  { href: "/", label: "Home", icon: "home", soon: false },
-  { href: "/capture", label: "Add items", icon: "camera", soon: false },
-  { href: "/grocery", label: "Import", icon: "list", soon: false },
-  { href: "/meals", label: "Meals", icon: "meals", soon: false },
-  { href: "/insights", label: "Insights", icon: "chart", soon: true },
-] as const;
+import { AddActionSheet } from "./AddActionSheet";
 
 /**
- * Avoid usePathname() entirely — with Cache Components + the auth proxy it
- * can throw into the route error boundary on the published host (digest
- * 1569762240). Active state is synced from the browser location after mount.
+ * Avoid usePathname() — with Cache Components + the auth proxy it can throw
+ * into the route error boundary on the published host. Sync from the browser
+ * location after mount instead.
  */
 export function BottomNav() {
   const [pathname, setPathname] = useState("/");
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => {
     const sync = () => setPathname(window.location.pathname);
@@ -42,37 +36,85 @@ export function BottomNav() {
     };
   }, []);
 
+  function isActive(href: string) {
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
   return (
-    <nav className="hb-bottom-nav" aria-label="Primary">
-      {ITEMS.map((item) => {
-        const active =
-          item.href === "/"
-            ? pathname === "/"
-            : pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`hb-bottom-nav__item${active ? " is-active" : ""}`}
-            aria-current={active ? "page" : undefined}
-            onClick={() => setPathname(item.href)}
+    <>
+      <nav className="hb-bottom-nav" aria-label="Primary">
+        <Link
+          href="/"
+          className={`hb-bottom-nav__item${isActive("/") ? " is-active" : ""}`}
+          aria-current={isActive("/") ? "page" : undefined}
+          onClick={() => setPathname("/")}
+        >
+          <NavIcon name="home" />
+          <span>Home</span>
+        </Link>
+
+        <Link
+          href="/inventory"
+          className={`hb-bottom-nav__item${isActive("/inventory") ? " is-active" : ""}`}
+          aria-current={isActive("/inventory") ? "page" : undefined}
+          onClick={() => setPathname("/inventory")}
+        >
+          <NavIcon name="inventory" />
+          <span>Inventory</span>
+        </Link>
+
+        <div className="hb-bottom-nav__add-slot">
+          <button
+            type="button"
+            className="hb-bottom-nav__add"
+            aria-haspopup="dialog"
+            aria-expanded={addOpen}
+            aria-label="Add to HomeBase"
+            onClick={() => setAddOpen(true)}
           >
-            <NavIcon name={item.icon} />
-            <span>{item.label}</span>
-            {item.soon ? (
-              <span className="hb-soon-dot" title="Coming soon" />
-            ) : null}
-          </Link>
-        );
-      })}
-    </nav>
+            <NavIcon name="add" />
+            <span className="sr-only">Add</span>
+          </button>
+          <span className="hb-bottom-nav__add-label" aria-hidden="true">
+            Add
+          </span>
+        </div>
+
+        <Link
+          href="/meals"
+          className={`hb-bottom-nav__item${isActive("/meals") ? " is-active" : ""}`}
+          aria-current={isActive("/meals") ? "page" : undefined}
+          onClick={() => setPathname("/meals")}
+        >
+          <NavIcon name="meals" />
+          <span>Meals</span>
+        </Link>
+
+        <Link
+          href="/insights"
+          className={`hb-bottom-nav__item${isActive("/insights") ? " is-active" : ""}`}
+          aria-current={isActive("/insights") ? "page" : undefined}
+          onClick={() => setPathname("/insights")}
+        >
+          <NavIcon name="chart" />
+          <span>Insights</span>
+        </Link>
+      </nav>
+
+      <AddActionSheet open={addOpen} onClose={() => setAddOpen(false)} />
+    </>
   );
 }
 
-function NavIcon({ name }: { name: (typeof ITEMS)[number]["icon"] }) {
+function NavIcon({
+  name,
+}: {
+  name: "home" | "inventory" | "add" | "meals" | "chart";
+}) {
   const common = {
-    width: 22,
-    height: 22,
+    width: name === "add" ? 26 : 22,
+    height: name === "add" ? 26 : 22,
     viewBox: "0 0 24 24",
     fill: "none" as const,
     "aria-hidden": true as const,
@@ -89,24 +131,30 @@ function NavIcon({ name }: { name: (typeof ITEMS)[number]["icon"] }) {
           />
         </svg>
       );
-    case "camera":
+    case "inventory":
       return (
         <svg {...common}>
           <path
-            d="M4 8.5A2.5 2.5 0 0 1 6.5 6h2l1.2-1.8A1 1 0 0 1 10.5 4h3a1 1 0 0 1 .8.4L15.5 6h2A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-9Z"
+            d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5v-9Z"
             stroke="currentColor"
             strokeWidth="1.7"
+            strokeLinejoin="round"
           />
-          <circle cx="12" cy="13" r="3.2" stroke="currentColor" strokeWidth="1.7" />
+          <path
+            d="M12 12v8M5 7.5 12 12l7-4.5"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
         </svg>
       );
-    case "list":
+    case "add":
       return (
         <svg {...common}>
           <path
-            d="M9 7h11M9 12h11M9 17h11M4.5 7h.01M4.5 12h.01M4.5 17h.01"
+            d="M12 6v12M6 12h12"
             stroke="currentColor"
-            strokeWidth="1.8"
+            strokeWidth="2.2"
             strokeLinecap="round"
           />
         </svg>
