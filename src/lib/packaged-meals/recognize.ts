@@ -7,8 +7,8 @@ export type RecognitionResult = {
 };
 
 /**
- * Suggest recipe_base / meal_kit without classifying every sauce/seasoning.
- * Conservative: only clear packet-meal signals (e.g. Mingle recipe bases, taco kits).
+ * Suggest recipe_base / meal_kit / cooking_sauce without classifying every
+ * pantry condiment. Conservative: clear packet-meal signals only.
  */
 export function recognizePackagedMealProduct(input: {
   name: string;
@@ -32,10 +32,10 @@ export function recognizePackagedMealProduct(input: {
     };
   }
 
-  // Mingle and similar dedicated recipe-base brands.
+  // Mingle and similar dedicated recipe-base brands (incl. satay, etc.).
   if (
     /\bmingle\b/.test(haystack) &&
-    /\b(recipe base|base|sachet|seasoning|simmer|curry|butter chicken|tikka|chow|stir.?fry|taco|ramen)\b/.test(
+    /\b(recipe base|base|sachet|seasoning|simmer|curry|butter chicken|tikka|chow|stir.?fry|taco|ramen|satay|teriyaki|rendang|laksa|massaman|korma)\b/.test(
       haystack,
     )
   ) {
@@ -54,9 +54,9 @@ export function recognizePackagedMealProduct(input: {
     };
   }
 
-  // Clear "recipe base" / "cooking sauce for X serves" style products.
+  // Clear recipe-base wording.
   if (
-    /\b(recipe base|recipe mix|meal base|simmer sauce|curry kit|slow cooker base)\b/.test(
+    /\b(recipe base|recipe mix|meal base|curry kit|slow cooker base)\b/.test(
       haystack,
     )
   ) {
@@ -67,7 +67,23 @@ export function recognizePackagedMealProduct(input: {
     };
   }
 
-  // Old El Paso / Mission dinner kits often named "Stand 'N Stuff" etc.
+  // Cooking / simmer sauces sold as a complete meal flavour base.
+  if (
+    /\b(simmer sauce|cooking sauce|stir.?fry sauce|curry sauce)\b/.test(
+      haystack,
+    ) &&
+    !/\b(soy sauce|fish sauce|hot sauce|worcestershire|oyster sauce)\b/.test(
+      haystack,
+    )
+  ) {
+    return {
+      suggestedKind: "cooking_sauce",
+      confidence: "medium",
+      reason: "Packaged cooking/simmer sauce used as a meal base.",
+    };
+  }
+
+  // Old El Paso / Mission dinner kits.
   if (
     /\b(old el paso|mission)\b/.test(haystack) &&
     /\b(kit|soft taco|stand.?n.?stuff|dinner)\b/.test(haystack)
@@ -84,7 +100,9 @@ export function recognizePackagedMealProduct(input: {
     /\b(hot sauce|soy sauce|fish sauce|worcestershire|ketchup|mayonnaise|mustard|vinegar|oil|salt|pepper|spice|herbs?|paste)\b/.test(
       haystack,
     ) &&
-    !/\b(recipe base|meal kit|dinner kit)\b/.test(haystack)
+    !/\b(recipe base|meal kit|dinner kit|simmer sauce|cooking sauce)\b/.test(
+      haystack,
+    )
   ) {
     return {
       suggestedKind: "standard",
@@ -116,4 +134,13 @@ export function detectAllergenMentions(text: string): string[] {
     if (pattern.test(lower)) found.push(key);
   }
   return found;
+}
+
+/** Maps catalog kind to the recipe_type used for Meals library rows. */
+export function recipeTypeForProductKind(
+  kind: ProductKind,
+): "traditional" | "recipe_base" | "meal_kit" {
+  if (kind === "meal_kit") return "meal_kit";
+  if (kind === "recipe_base" || kind === "cooking_sauce") return "recipe_base";
+  return "traditional";
 }

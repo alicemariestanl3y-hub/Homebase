@@ -72,4 +72,33 @@ describe("saving AI-recognised products", () => {
     assert.equal(result.savedCount, 0);
     assert.match(result.error ?? "", /none of the selected items/i);
   });
+
+  it("stocks Mingle Satay Recipe Base as one packet, linked to catalog", async () => {
+    const marker = `Mingle Satay Recipe Base ${Date.now()}`;
+    const result = await performSaveCapturedItems([
+      candidate({
+        name: marker,
+        brand: "Mingle",
+        quantity: 30,
+        unit: "g",
+        packageSize: "30g",
+        suggestedLocation: "pantry",
+      }),
+    ]);
+
+    assert.equal(result.error, null, result.error ?? "expected success");
+    assert.equal(result.savedCount, 1);
+    assert.equal(result.savedItems.length, 1);
+    assert.equal(result.savedItems[0]?.isPackagedMealProduct, true);
+    assert.equal(result.savedItems[0]?.productKind, "recipe_base");
+    assert.ok(result.savedItems[0]?.catalogProductId);
+
+    const repo = getInventoryRepository();
+    const pantry = await repo.listItemsByLocation(DEMO_HOUSEHOLD_ID, "pantry");
+    const found = pantry.find((item) => item.name === marker);
+    assert.ok(found);
+    assert.equal(found?.quantity, 1);
+    assert.equal(found?.unit, "packets");
+    assert.equal(found?.catalogProductId, result.savedItems[0]?.catalogProductId);
+  });
 });

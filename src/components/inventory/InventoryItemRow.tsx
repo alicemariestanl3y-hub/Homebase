@@ -19,6 +19,7 @@ import {
   UNIT_LABELS,
 } from "@/lib/inventory/units";
 import type { InventoryItemView, LocationType } from "@/lib/inventory/types";
+import { LinkInventoryMealForm } from "./LinkInventoryMealForm";
 import { QuantityInput } from "./QuantityInput";
 
 type InventoryItemRowProps = {
@@ -33,7 +34,9 @@ export function InventoryItemRow({
   locationType,
 }: InventoryItemRowProps) {
   const router = useRouter();
-  const [mode, setMode] = useState<"view" | "edit" | "use" | "remove">("view");
+  const [mode, setMode] = useState<
+    "view" | "edit" | "use" | "remove" | "link"
+  >("view");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +185,31 @@ export function InventoryItemRow({
               >
                 Edit details
               </button>
+              {!item.catalogProductId ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMode("link");
+                    setMenuOpen(false);
+                  }}
+                >
+                  Link to recipe meal…
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push(
+                      `/meals/packet/new?productId=${item.catalogProductId}`,
+                    );
+                  }}
+                >
+                  Verify / update packet meal
+                </button>
+              )}
               <button
                 type="button"
                 role="menuitem"
@@ -330,6 +358,14 @@ export function InventoryItemRow({
             </button>
           </div>
         </form>
+      ) : null}
+
+      {mode === "link" ? (
+        <LinkInventoryMealForm
+          inventoryItemId={item.id}
+          defaultName={item.name}
+          onCancel={() => setMode("view")}
+        />
       ) : null}
 
       {mode === "remove" ? (

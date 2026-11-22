@@ -5,17 +5,32 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import { filesToResizedDataUrls } from "@/lib/capture/client-resize";
 import { findDuplicateMatches } from "@/lib/capture/duplicates";
-import type { CapturedCandidate, DuplicateMatch } from "@/lib/capture/types";
+import type {
+  CapturedCandidate,
+  DuplicateMatch,
+  SavedCaptureItem,
+} from "@/lib/capture/types";
 import { LOCATION_LABELS, LOCATION_ORDER } from "@/lib/inventory/labels";
 import { INVENTORY_UNITS, UNIT_LABELS } from "@/lib/inventory/units";
 import type { InventoryItem, LocationType } from "@/lib/inventory/types";
+import type { PacketRecipeDraft } from "@/lib/packaged-meals/extract-packet-recipe";
+import {
+  storePacketDraft,
+  storePacketImages,
+} from "@/lib/packaged-meals/draft-storage";
 
 type SmartCaptureFlowProps = {
   existingItems: InventoryItem[];
   locationById: Record<string, LocationType>;
 };
 
-type Step = "photos" | "review";
+type Step = "photos" | "review" | "packet";
+
+const KIND_LABEL: Record<string, string> = {
+  recipe_base: "Recipe base",
+  meal_kit: "Meal kit",
+  cooking_sauce: "Cooking sauce",
+};
 
 export function SmartCaptureFlow({
   existingItems,
@@ -24,7 +39,13 @@ export function SmartCaptureFlow({
   const router = useRouter();
   const [step, setStep] = useState<Step>("photos");
   const [previews, setPreviews] = useState<string[]>([]);
+  const [reviewImages, setReviewImages] = useState<string[]>([]);
   const [candidates, setCandidates] = useState<CapturedCandidate[]>([]);
+  const [savedPackaged, setSavedPackaged] = useState<SavedCaptureItem[]>([]);
+  const [packetDrafts, setPacketDrafts] = useState<
+    Record<string, PacketRecipeDraft | null>
+  >({});
+  const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -33,10 +54,14 @@ export function SmartCaptureFlow({
   const resetToPhotos = useCallback(() => {
     setStep("photos");
     setPreviews([]);
+    setReviewImages([]);
     setCandidates([]);
+    setSavedPackaged([]);
+    setPacketDrafts({});
     setError(null);
     setInfo(null);
     setAnalyzing(false);
+    setExtracting(false);
   }, []);
 
   // iOS/Safari bfcache can restore a frozen review screen when revisiting.
@@ -97,8 +122,9 @@ export function SmartCaptureFlow({
       }));
       setCandidates(next);
       setInfo(json.warning ?? null);
+      // Keep images for optional packet-recipe extraction after save.
+      setReviewImages(previews);
       setStep("review");
-      // Drop photo payloads from memory after analysis.
       setPreviews([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed.");
@@ -120,6 +146,37 @@ export function SmartCaptureFlow({
     return findDuplicateMatches(candidate, existingItems, locationMap);
   }
 
+  async function extractForPackaged(items: SavedCaptureItem[]) {
+    setExtracting(true);
+    const drafts: Record<string, PacketRecipeDraft | null> = {};
+    for (const item of items) {
+      if (!item.catalogProductId) continue;
+      storePacketImages(item.catalogProductId, reviewImages);
+      try {
+        const response = await fetch("/api/packaged-meals/extract-packet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            images: reviewImages.slice(0, 4),
+            productName: item.name,
+            brand: item.brand,
+          }),
+        });
+        const json = (await response.json()) as {
+          draft?: PacketRecipeDraft;
+          error?: string;
+        };
+        const draft = json.draft ?? null;
+        drafts[item.catalogProductId] = draft;
+        if (draft) storePacketDraft(item.catalogProductId, draft);
+      } catch {
+        drafts[item.catalogProductId] = null;
+      }
+    }
+    setPacketDrafts(drafts);
+    setExtracting(false);
+  }
+
   function save() {
     startTransition(async () => {
       setError(null);
@@ -131,11 +188,16 @@ export function SmartCaptureFlow({
           body: JSON.stringify({ candidates }),
         });
 
-        let result: { error: string | null; savedCount: number };
+        let result: {
+          error: string | null;
+          savedCount: number;
+          savedItems?: SavedCaptureItem[];
+        };
         try {
           result = (await response.json()) as {
             error: string | null;
             savedCount: number;
+            savedItems?: SavedCaptureItem[];
           };
         } catch {
           setError(
@@ -146,6 +208,20 @@ export function SmartCaptureFlow({
 
         if (!response.ok || result.error) {
           setError(result.error || `Save failed (${response.status}).`);
+          return;
+        }
+
+        const packaged = (result.savedItems ?? []).filter(
+          (row) => row.isPackagedMealProduct && row.catalogProductId,
+        );
+
+        if (packaged.length > 0) {
+          setSavedPackaged(packaged);
+          setStep("packet");
+          setInfo(
+            `Saved ${result.savedCount} item${result.savedCount === 1 ? "" : "s"}. Confirm the packet recipe to add it to Meals.`,
+          );
+          void extractForPackaged(packaged);
           return;
         }
 
@@ -160,17 +236,29 @@ export function SmartCaptureFlow({
     });
   }
 
+  const stepTitle =
+    step === "photos"
+      ? "Photograph your kitchen"
+      : step === "review"
+        ? "Review before saving"
+        : "Confirm packet recipe";
+
+  const stepHelp =
+    step === "photos"
+      ? "Take or upload shelf photos. We’ll resize them, identify products, then let you approve everything."
+      : step === "review"
+        ? "Correct uncertain items, merge duplicates, and only then save to your household inventory. Recipe bases are stocked as whole packets."
+        : "We tried to read the packet. Edit anything that looks wrong — we never invent ingredients. Then save it into your Meals library.";
+
   return (
     <div className="capture-flow">
       <div className="capture-hero">
         <p className="hb-kicker">Smart Inventory Capture</p>
         <h1 className="section-title" style={{ fontSize: "1.45rem", marginTop: "0.35rem" }}>
-          {step === "photos" ? "Photograph your kitchen" : "Review before saving"}
+          {stepTitle}
         </h1>
         <p style={{ color: "var(--hb-muted)", margin: "0.45rem 0 0", lineHeight: 1.45 }}>
-          {step === "photos"
-            ? "Take or upload shelf photos. We’ll resize them, identify products, then let you approve everything."
-            : "Correct uncertain items, merge duplicates, and only then save to your household inventory."}
+          {stepHelp}
         </p>
         {step === "photos" ? (
           <p style={{ margin: "0.65rem 0 0", fontSize: "0.9rem" }}>
@@ -254,6 +342,7 @@ export function SmartCaptureFlow({
           ) : (
             candidates.map((candidate) => {
               const dupes = duplicatesFor(candidate);
+              const kind = candidate.suggestedProductKind;
               return (
                 <article
                   key={candidate.id}
@@ -277,6 +366,14 @@ export function SmartCaptureFlow({
                       {candidate.needsReview ? " · review" : ""}
                     </span>
                   </div>
+
+                  {candidate.isPackagedMealProduct && kind ? (
+                    <p className="hb-packet-badge" style={{ margin: 0, fontSize: "0.85rem" }}>
+                      {KIND_LABEL[kind] ?? kind}
+                      {" · stocked as packets"}
+                      {candidate.packageSize ? ` · pack ${candidate.packageSize}` : ""}
+                    </p>
+                  ) : null}
 
                   <label className="auth-field">
                     <span>Name</span>
@@ -401,6 +498,64 @@ export function SmartCaptureFlow({
             onClick={resetToPhotos}
           >
             Back to photos
+          </button>
+        </section>
+      ) : null}
+
+      {step === "packet" ? (
+        <section style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+          {extracting ? (
+            <p className="hb-empty">Reading packet instructions from your photo…</p>
+          ) : null}
+          {savedPackaged.map((item) => {
+            const draft = item.catalogProductId
+              ? packetDrafts[item.catalogProductId]
+              : null;
+            return (
+              <article key={item.inventoryItemId} className="review-card">
+                <p className="hb-item-name" style={{ margin: 0 }}>
+                  {[item.brand, item.name].filter(Boolean).join(" ")}
+                </p>
+                <p className="hb-item-meta" style={{ margin: "0.35rem 0 0" }}>
+                  {item.productKind
+                    ? KIND_LABEL[item.productKind] ?? item.productKind
+                    : "Packet product"}
+                  {item.packageSize ? ` · ${item.packageSize}` : ""}
+                  {" · saved as packets in inventory"}
+                </p>
+                {draft?.notes ? (
+                  <p style={{ margin: "0.5rem 0 0", fontSize: "0.85rem", color: "var(--hb-muted)" }}>
+                    {draft.notes}
+                  </p>
+                ) : null}
+                {draft?.source === "packet_photo" && draft.instructions ? (
+                  <p style={{ margin: "0.5rem 0 0", fontSize: "0.85rem", whiteSpace: "pre-wrap" }}>
+                    {draft.instructions.slice(0, 280)}
+                    {draft.instructions.length > 280 ? "…" : ""}
+                  </p>
+                ) : null}
+                {item.catalogProductId ? (
+                  <Link
+                    href={`/meals/packet/new?productId=${item.catalogProductId}`}
+                    className="hb-btn"
+                    style={{ marginTop: "0.75rem", textAlign: "center" }}
+                  >
+                    Review &amp; save meal
+                  </Link>
+                ) : null}
+              </article>
+            );
+          })}
+          <button
+            type="button"
+            className="hb-btn hb-btn--ghost"
+            onClick={() => {
+              resetToPhotos();
+              router.push("/inventory");
+              router.refresh();
+            }}
+          >
+            Skip for now — go to inventory
           </button>
         </section>
       ) : null}

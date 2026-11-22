@@ -1,11 +1,17 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { INVENTORY_UNITS, UNIT_LABELS } from "@/lib/inventory/units";
 import type { CatalogProduct } from "@/lib/packaged-meals/types";
 import type { InventoryUnit } from "@/lib/inventory/types";
 import { DEFAULT_HOUSEHOLD_ALLERGENS } from "@/lib/packaged-meals/types";
+import {
+  clearPacketDraft,
+  readPacketDraft,
+  readPacketImages,
+} from "@/lib/packaged-meals/draft-storage";
+import type { PacketRecipeDraft } from "@/lib/packaged-meals/extract-packet-recipe";
 import { QuantityInput } from "@/components/inventory/QuantityInput";
 
 type Line = {
@@ -19,6 +25,21 @@ type PackagedMealVerifyFormProps = {
   product: CatalogProduct;
 };
 
+function linesFromDraft(
+  rows: PacketRecipeDraft["included"] | PacketRecipeDraft["additionalIngredients"],
+  fallbackUnit: InventoryUnit | "",
+): Line[] {
+  if (!rows.length) {
+    return [{ name: "", quantity: "", unit: fallbackUnit, notes: "" }];
+  }
+  return rows.map((row) => ({
+    name: row.name,
+    quantity: row.quantity != null ? String(row.quantity) : "",
+    unit: (row.unit as InventoryUnit | "") || fallbackUnit,
+    notes: "",
+  }));
+}
+
 export function PackagedMealVerifyForm({ product }: PackagedMealVerifyFormProps) {
   const router = useRouter();
   const [title, setTitle] = useState(
@@ -30,8 +51,16 @@ export function PackagedMealVerifyForm({ product }: PackagedMealVerifyFormProps)
   const [packetsRequired, setPacketsRequired] = useState("1");
   const [instructions, setInstructions] = useState("");
   const [sourceReference, setSourceReference] = useState("");
+  const [instructionsSource, setInstructionsSource] = useState<
+    "user_typed" | "user_packet_photo"
+  >("user_typed");
   const [included, setIncluded] = useState<Line[]>([
-    { name: "", quantity: "", unit: "packets", notes: "" },
+    {
+      name: product.displayName,
+      quantity: "1",
+      unit: "packets",
+      notes: "",
+    },
   ]);
   const [additional, setAdditional] = useState<Line[]>([
     { name: "", quantity: "", unit: "g", notes: "" },
@@ -41,8 +70,60 @@ export function PackagedMealVerifyForm({ product }: PackagedMealVerifyFormProps)
   >("unverified");
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
   const [allergenNotes, setAllergenNotes] = useState("");
+  const [draftNote, setDraftNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const draft = readPacketDraft(product.id);
+    if (draft) {
+      applyDraft(draft);
+      return;
+    }
+    const images = readPacketImages(product.id);
+    if (images.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/packaged-meals/extract-packet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            images,
+            productName: product.displayName,
+            brand: product.brand,
+          }),
+        });
+        const json = (await response.json()) as { draft?: PacketRecipeDraft };
+        if (!cancelled && json.draft) applyDraft(json.draft);
+      } catch {
+        // Manual entry still works.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+
+    function applyDraft(draft: PacketRecipeDraft) {
+      if (draft.title) setTitle(draft.title);
+      if (draft.servings) setServings(String(draft.servings));
+      if (draft.packetsRequired) setPacketsRequired(String(draft.packetsRequired));
+      if (draft.instructions) {
+        setInstructions(draft.instructions);
+        setInstructionsSource("user_packet_photo");
+      }
+      if (draft.included.length) {
+        setIncluded(linesFromDraft(draft.included, "packets"));
+      }
+      if (draft.additionalIngredients.length) {
+        setAdditional(linesFromDraft(draft.additionalIngredients, "g"));
+      }
+      setDraftNote(draft.notes);
+      setSourceReference(
+        draft.source === "packet_photo" ? "Extracted from packet photo" : "",
+      );
+    }
+  }, [product.id, product.displayName, product.brand]);
 
   const label = useMemo(
     () =>
@@ -92,7 +173,7 @@ export function PackagedMealVerifyForm({ product }: PackagedMealVerifyFormProps)
           servingsPerPacket: Number(servings) || 4,
           packetsRequired: Number(packetsRequired) || 1,
           instructions,
-          instructionsSource: "user_typed",
+          instructionsSource,
           sourceReference: sourceReference || null,
           included: includedClean,
           additionalIngredients: additionalClean,
@@ -109,6 +190,7 @@ export function PackagedMealVerifyForm({ product }: PackagedMealVerifyFormProps)
         setError(json.error || "Could not save verified packet meal.");
         return;
       }
+      clearPacketDraft(product.id);
       router.push(`/meals/${json.def.recipeId}`);
       router.refresh();
     });
@@ -121,10 +203,15 @@ export function PackagedMealVerifyForm({ product }: PackagedMealVerifyFormProps)
         {label}
       </h1>
       <p style={{ color: "var(--hb-muted)", lineHeight: 1.45 }}>
-        Paste the cooking instructions and ingredient list from this exact
-        product. HomeBase will reuse them the next time you buy the same pack —
-        it will not invent ingredients or steps.
+        Confirm cooking instructions and ingredients from this exact product.
+        HomeBase reuses them the next time you buy the same pack — it will not
+        invent ingredients or steps.
       </p>
+      {draftNote ? (
+        <p className="auth-success" style={{ marginTop: "0.75rem" }}>
+          {draftNote}
+        </p>
+      ) : null}
 
       <label className="auth-field">
         <span>Meal title</span>

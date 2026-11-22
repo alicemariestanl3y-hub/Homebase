@@ -4,6 +4,7 @@ export type ProductKind =
   | "standard"
   | "recipe_base"
   | "meal_kit"
+  | "cooking_sauce"
   | "unclassified";
 
 export type RecipeType = "traditional" | "recipe_base" | "meal_kit";
