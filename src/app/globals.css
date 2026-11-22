@@ -1423,3 +1423,116 @@ textarea {
   display: grid;
   gap: 0.85rem;
 }
+
+.hb-meal-rec {
+  margin: 0 0 1.75rem;
+}
+
+.hb-meal-rec__lead {
+  margin: 0 0 0.85rem;
+  color: var(--hb-muted);
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.hb-meal-rec__list,
+.hb-meal-pending__list,
+.hb-classify__list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hb-meal-rec__card,
+.hb-meal-pending__list li,
+.hb-classify__list li {
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--hb-line);
+  border-radius: var(--hb-radius-md);
+  background: #fff;
+}
+
+.hb-meal-rec__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hb-meal-rec__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.hb-meal-rec__actions,
+.hb-classify__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.hb-meal-pending {
+  margin: 0 0 1.25rem;
+}
+
+.hb-meal-pending__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.hb-meal-pending__list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.hb-pill--warn {
+  background: var(--hb-warn-bg);
+  color: var(--hb-warn);
+}
+
+.hb-pill--danger {
+  background: var(--hb-danger-bg);
+  color: var(--hb-danger);
+}
+
+.hb-classify {
+  margin: 0 0 1.25rem;
+}
+
+.packet-verify,
+.packet-ingredients,
+.packet-allergens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.packet-ingredients__row {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--hb-line);
+}
+
+.packet-allergens {
+  border: 1px solid var(--hb-line);
+  border-radius: var(--hb-radius-md);
+  padding: 0.85rem 1rem 1rem;
+  background: #fff;
+}
+
+.packet-allergens legend {
+  padding: 0 0.35rem;
+  font-weight: 700;
+}
+
+.hb-allergen-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+}

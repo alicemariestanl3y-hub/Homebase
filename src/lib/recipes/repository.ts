@@ -28,6 +28,8 @@ type DbRecipe = {
   leftover_friendly: boolean;
   dietary_tags: string[] | null;
   variation_of_recipe_id: string | null;
+  recipe_type?: string | null;
+  catalog_product_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -76,6 +78,11 @@ function mapRecipe(row: DbRecipe, ingredients: RecipeIngredient[]): Recipe {
     leftoverFriendly: row.leftover_friendly,
     dietaryTags: row.dietary_tags ?? [],
     variationOfRecipeId: row.variation_of_recipe_id,
+    recipeType:
+      row.recipe_type === "recipe_base" || row.recipe_type === "meal_kit"
+        ? row.recipe_type
+        : "traditional",
+    catalogProductId: row.catalog_product_id ?? null,
     ingredients,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -107,7 +114,7 @@ export async function listRecipes(
   const { data, error } = await supabase
     .from("recipes")
     .select(
-      "id, household_id, title, source_url, source_name, attribution, servings, prep_minutes, cook_minutes, cuisine, cooking_method, notes, is_favourite, freezer_suitable, leftover_friendly, dietary_tags, variation_of_recipe_id, created_at, updated_at, recipe_ingredients(count)",
+      "id, household_id, title, source_url, source_name, attribution, servings, prep_minutes, cook_minutes, cuisine, cooking_method, notes, is_favourite, freezer_suitable, leftover_friendly, dietary_tags, variation_of_recipe_id, recipe_type, catalog_product_id, created_at, updated_at, recipe_ingredients(count)",
     )
     .eq("household_id", householdId)
     .order("title");
@@ -139,7 +146,7 @@ export async function getRecipe(
   const { data, error } = await supabase
     .from("recipes")
     .select(
-      "id, household_id, title, source_url, source_name, attribution, servings, prep_minutes, cook_minutes, cuisine, cooking_method, instructions, notes, is_favourite, freezer_suitable, leftover_friendly, dietary_tags, variation_of_recipe_id, created_at, updated_at",
+      "id, household_id, title, source_url, source_name, attribution, servings, prep_minutes, cook_minutes, cuisine, cooking_method, instructions, notes, is_favourite, freezer_suitable, leftover_friendly, dietary_tags, variation_of_recipe_id, recipe_type, catalog_product_id, created_at, updated_at",
     )
     .eq("household_id", householdId)
     .eq("id", recipeId)
@@ -201,6 +208,8 @@ export async function createRecipe(
       leftoverFriendly: Boolean(input.leftoverFriendly),
       dietaryTags: input.dietaryTags ?? [],
       variationOfRecipeId: input.variationOfRecipeId ?? null,
+      recipeType: input.recipeType ?? "traditional",
+      catalogProductId: input.catalogProductId ?? null,
       ingredients: input.ingredients.map((ingredient, index) => ({
         id: crypto.randomUUID(),
         name: ingredient.name.trim(),
@@ -239,10 +248,12 @@ export async function createRecipe(
       leftover_friendly: Boolean(input.leftoverFriendly),
       dietary_tags: input.dietaryTags ?? [],
       variation_of_recipe_id: input.variationOfRecipeId ?? null,
+      recipe_type: input.recipeType ?? "traditional",
+      catalog_product_id: input.catalogProductId ?? null,
       created_by: userId ?? null,
     })
     .select(
-      "id, household_id, title, source_url, source_name, attribution, servings, prep_minutes, cook_minutes, cuisine, cooking_method, instructions, notes, is_favourite, freezer_suitable, leftover_friendly, dietary_tags, variation_of_recipe_id, created_at, updated_at",
+      "id, household_id, title, source_url, source_name, attribution, servings, prep_minutes, cook_minutes, cuisine, cooking_method, instructions, notes, is_favourite, freezer_suitable, leftover_friendly, dietary_tags, variation_of_recipe_id, recipe_type, catalog_product_id, created_at, updated_at",
     )
     .single();
 
@@ -311,6 +322,8 @@ export async function updateRecipe(
       leftoverFriendly: Boolean(input.leftoverFriendly),
       dietaryTags: input.dietaryTags ?? [],
       variationOfRecipeId: input.variationOfRecipeId ?? null,
+      recipeType: input.recipeType ?? existing.recipeType,
+      catalogProductId: input.catalogProductId ?? existing.catalogProductId,
       ingredients: input.ingredients.map((ingredient, index) => ({
         id: crypto.randomUUID(),
         name: ingredient.name.trim(),
@@ -347,11 +360,13 @@ export async function updateRecipe(
       leftover_friendly: Boolean(input.leftoverFriendly),
       dietary_tags: input.dietaryTags ?? [],
       variation_of_recipe_id: input.variationOfRecipeId ?? null,
+      recipe_type: input.recipeType ?? "traditional",
+      catalog_product_id: input.catalogProductId ?? null,
     })
     .eq("id", recipeId)
     .eq("household_id", householdId)
     .select(
-      "id, household_id, title, source_url, source_name, attribution, servings, prep_minutes, cook_minutes, cuisine, cooking_method, instructions, notes, is_favourite, freezer_suitable, leftover_friendly, dietary_tags, variation_of_recipe_id, created_at, updated_at",
+      "id, household_id, title, source_url, source_name, attribution, servings, prep_minutes, cook_minutes, cuisine, cooking_method, instructions, notes, is_favourite, freezer_suitable, leftover_friendly, dietary_tags, variation_of_recipe_id, recipe_type, catalog_product_id, created_at, updated_at",
     )
     .single();
 

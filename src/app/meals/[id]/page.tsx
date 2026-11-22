@@ -2,9 +2,15 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { AppShell } from "@/components/layout/AppShell";
+import { CookConfirmPanel } from "@/components/meals/CookConfirmPanel";
 import { RecipeDetail } from "@/components/recipes/RecipeDetail";
 import { resolveHouseholdIdForRequest } from "@/lib/household/resolve";
-import { getInventoryMode } from "@/lib/inventory/get-repository";
+import {
+  getInventoryMode,
+  getInventoryRepository,
+} from "@/lib/inventory/get-repository";
+import { LOCATION_ORDER } from "@/lib/inventory/labels";
+import { listPackagedMealDefs } from "@/lib/packaged-meals/repository";
 import { getRecipe } from "@/lib/recipes/repository";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -34,9 +40,26 @@ async function RecipeDetailContent({ params }: PageProps) {
     );
   }
 
+  const repo = getInventoryRepository();
+  const inventory = (
+    await Promise.all(
+      LOCATION_ORDER.map((location) =>
+        repo.listItemsByLocation(household.householdId!, location),
+      ),
+    )
+  ).flat();
+  const defs = await listPackagedMealDefs(household.householdId);
+  const def = defs.find((row) => row.recipeId === recipe.id);
+
   return (
     <AppShell showSignOut={mode === "live"}>
       <RecipeDetail recipe={recipe} />
+      <CookConfirmPanel
+        recipe={recipe}
+        inventory={inventory}
+        packagedMealDefId={def?.id ?? null}
+        packetsRequired={def?.packetsRequired ?? 1}
+      />
     </AppShell>
   );
 }

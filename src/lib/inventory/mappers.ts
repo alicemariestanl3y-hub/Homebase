@@ -25,6 +25,7 @@ export type DbInventoryItem = {
   unit: InventoryUnit;
   expires_on: string | null;
   notes: string | null;
+  catalog_product_id?: string | null;
   updated_at: string;
 };
 export type DbInventoryActivity = {
@@ -63,6 +64,7 @@ export function mapItem(row: DbInventoryItem): InventoryItem {
     unit: row.unit,
     expiresOn: row.expires_on,
     notes: row.notes,
+    catalogProductId: row.catalog_product_id ?? null,
     updatedAt: row.updated_at,
   };
 }

@@ -250,6 +250,25 @@ export async function performSaveGroceryImport(
           item.notes,
           "Added via Grocery Import",
         ].filter(Boolean);
+        let catalogProductId: string | null = null;
+        try {
+          const { upsertCatalogProduct } = await import(
+            "@/lib/packaged-meals/repository"
+          );
+          const product = await upsertCatalogProduct({
+            householdId: household.householdId,
+            brand: item.brand,
+            displayName: inventoryName,
+            packSize: item.packageSize,
+            originalName: item.originalName ?? item.name,
+            notes: noteParts.join(" · ") || null,
+            sourceType: "import",
+          });
+          catalogProductId = product.id;
+        } catch (catalogError) {
+          console.error("catalog upsert on grocery save failed:", catalogError);
+        }
+
         await repo.addItem({
           householdId: household.householdId,
           locationType: item.suggestedLocation,
@@ -258,6 +277,7 @@ export async function performSaveGroceryImport(
           unit: item.unit as InventoryUnit,
           expiresOn: null,
           notes: noteParts.join(" · ") || null,
+          catalogProductId,
         });
       }
       savedCount += 1;

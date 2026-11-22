@@ -60,6 +60,8 @@ describe("route classifiers", () => {
     assert.equal(isPublicApiPath("/api/inventory/add"), true);
     assert.equal(isPublicApiPath("/api/grocery/analyze"), true);
     assert.equal(isPublicApiPath("/api/recipes"), true);
+    assert.equal(isPublicApiPath("/api/catalog/upsert"), true);
+    assert.equal(isPublicApiPath("/api/packaged-meals/recommendations"), true);
     assert.equal(isPublicApiPath("/capture"), false);
   });
 });

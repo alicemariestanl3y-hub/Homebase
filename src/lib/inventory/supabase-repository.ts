@@ -26,7 +26,7 @@ import type {
 } from "./types";
 
 const ITEM_SELECT =
-  "id, household_id, location_id, name, quantity, unit, expires_on, notes, updated_at";
+  "id, household_id, location_id, name, quantity, unit, expires_on, notes, catalog_product_id, updated_at";
 
 type AuthedClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -185,6 +185,7 @@ export class SupabaseInventoryRepository implements InventoryRepository {
         unit: input.unit,
         expires_on: input.expiresOn || null,
         notes: input.notes?.trim() || null,
+        catalog_product_id: input.catalogProductId ?? null,
       })
       .select(ITEM_SELECT)
       .single();
