@@ -1,4 +1,4 @@
-import type { CapturedCandidate } from "@/lib/capture/types";
+import type { CapturedCandidate, SavedCaptureItem } from "@/lib/capture/types";
 import { LOCATION_ORDER } from "@/lib/inventory/labels";
 import {
   getDemoHouseholdId,
@@ -12,10 +12,19 @@ import type { InventoryUnit, LocationType } from "@/lib/inventory/types";
 import { toDbError } from "@/lib/inventory/db-error";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { normalizeCaptureCandidate } from "@/lib/packaged-meals/normalize-capture";
+import {
+  linkInventoryItemToCatalog,
+  upsertCatalogProduct,
+} from "@/lib/packaged-meals/repository";
+import type { ProductKind } from "@/lib/packaged-meals/types";
+
+export type { SavedCaptureItem };
 
 export type SaveCaptureResult = {
   error: string | null;
   savedCount: number;
+  savedItems: SavedCaptureItem[];
 };
 
 async function requireCaptureAccess(): Promise<{ error: string | null }> {
@@ -41,11 +50,15 @@ export async function performSaveCapturedItems(
   candidates: CapturedCandidate[],
 ): Promise<SaveCaptureResult> {
   const access = await requireCaptureAccess();
-  if (access.error) return { error: access.error, savedCount: 0 };
+  if (access.error) return { error: access.error, savedCount: 0, savedItems: [] };
 
   const selected = candidates.filter((item) => item.selected !== false);
   if (selected.length === 0) {
-    return { error: "Select at least one item to save.", savedCount: 0 };
+    return {
+      error: "Select at least one item to save.",
+      savedCount: 0,
+      savedItems: [],
+    };
   }
 
   const mode = getInventoryMode();
@@ -61,20 +74,27 @@ export async function performSaveCapturedItems(
           ensured.error ??
           "No household found for your account. Run the ensure_my_household migration, then sign in again.",
         savedCount: 0,
+        savedItems: [],
       };
     }
   }
 
   if (!householdId) {
-    return { error: "No household found for your account.", savedCount: 0 };
+    return {
+      error: "No household found for your account.",
+      savedCount: 0,
+      savedItems: [],
+    };
   }
 
   const repo = getInventoryRepository();
   let savedCount = 0;
   let skipped = 0;
+  const savedItems: SavedCaptureItem[] = [];
 
   try {
-    for (const item of selected) {
+    for (const raw of selected) {
+      const item = normalizeCaptureCandidate(raw);
       if (!item.name.trim()) {
         skipped += 1;
         continue;
@@ -92,11 +112,34 @@ export async function performSaveCapturedItems(
         continue;
       }
 
-      // Never invent expiry — only persist if the model/user supplied YYYY-MM-DD.
       const expiresOn =
         item.expiresOn && /^\d{4}-\d{2}-\d{2}$/.test(item.expiresOn)
           ? item.expiresOn
           : null;
+
+      let catalogProductId: string | null = null;
+      let productKind: ProductKind | null = item.suggestedProductKind;
+      try {
+        const product = await upsertCatalogProduct({
+          householdId,
+          brand: item.brand,
+          displayName: item.name.trim(),
+          packSize: item.packageSize,
+          originalName: item.name.trim(),
+          notes: item.notes,
+          sourceType: "capture",
+          productKind: item.isPackagedMealProduct
+            ? item.suggestedProductKind
+            : undefined,
+          kindConfirmed: false,
+        });
+        catalogProductId = product.id;
+        productKind = product.productKind;
+      } catch (catalogError) {
+        console.error("catalog upsert on capture save failed:", catalogError);
+      }
+
+      let inventoryItemId: string | null = null;
 
       if (item.mergeWithItemId) {
         const snapshot = await repo.getSnapshot(householdId);
@@ -112,25 +155,51 @@ export async function performSaveCapturedItems(
           snapshot?.locations.find((loc) => loc.id === existing.locationId)
             ?.type ?? item.suggestedLocation;
 
-        await repo.updateItem({
+        // Prefer packets when merging into a weight row for the same packet product.
+        const nextUnit =
+          item.isPackagedMealProduct && existing.unit !== "packets"
+            ? item.unit
+            : existing.unit;
+        const nextQuantity =
+          item.isPackagedMealProduct && existing.unit !== "packets"
+            ? item.quantity
+            : existing.quantity + item.quantity;
+
+        const updated = await repo.updateItem({
           householdId,
           itemId: existing.id,
           name: existing.name,
-          quantity: existing.quantity + item.quantity,
-          unit: existing.unit,
+          quantity: nextQuantity,
+          unit: nextUnit,
           locationType,
           expiresOn: existing.expiresOn,
           notes: existing.notes,
+          catalogProductId: catalogProductId ?? existing.catalogProductId,
         });
+        inventoryItemId = updated.id;
+        if (catalogProductId) {
+          try {
+            await linkInventoryItemToCatalog(
+              householdId,
+              updated.id,
+              catalogProductId,
+            );
+          } catch (linkError) {
+            console.error("catalog link on merge failed:", linkError);
+          }
+        }
       } else {
         const noteParts = [
           item.brand ? `Brand: ${item.brand}` : null,
           item.packageSize ? `Pack: ${item.packageSize}` : null,
+          item.isPackagedMealProduct
+            ? `Stocked as ${item.quantity} packet${item.quantity === 1 ? "" : "s"}`
+            : null,
           item.notes,
           "Added via Smart Capture",
         ].filter(Boolean);
 
-        await repo.addItem({
+        const created = await repo.addItem({
           householdId,
           locationType: item.suggestedLocation,
           name: item.name.trim(),
@@ -138,15 +207,29 @@ export async function performSaveCapturedItems(
           unit: item.unit as InventoryUnit,
           expiresOn,
           notes: noteParts.join(" · ") || null,
+          catalogProductId,
         });
+        inventoryItemId = created.id;
       }
 
-      savedCount += 1;
+      if (inventoryItemId) {
+        savedItems.push({
+          inventoryItemId,
+          catalogProductId,
+          name: item.name.trim(),
+          productKind,
+          isPackagedMealProduct: item.isPackagedMealProduct,
+          packageSize: item.packageSize,
+          brand: item.brand,
+        });
+        savedCount += 1;
+      }
     }
   } catch (error) {
     return {
       error: toDbError(error, "Could not save captured items.").message,
       savedCount,
+      savedItems,
     };
   }
 
@@ -157,8 +240,9 @@ export async function performSaveCapturedItems(
           ? "None of the selected items could be saved. Check name, unit, location and quantity."
           : "No items were saved.",
       savedCount: 0,
+      savedItems: [],
     };
   }
 
-  return { error: null, savedCount };
+  return { error: null, savedCount, savedItems };
 }

@@ -1,5 +1,6 @@
 import { INVENTORY_UNITS } from "@/lib/inventory/units";
 import type { InventoryUnit, LocationType } from "@/lib/inventory/types";
+import { normalizeCaptureCandidates } from "@/lib/packaged-meals/normalize-capture";
 import type { CapturedCandidate } from "./types";
 
 const MODEL = "gpt-4o-mini";
@@ -18,15 +19,17 @@ type VisionItem = {
   sourceImageIndex?: number | null;
 };
 
-const SYSTEM_PROMPT = `You identify grocery products visible in household photos (pantry shelves, fridge shelves, freezer contents, shopping bags).
+const SYSTEM_PROMPT = `You identify grocery products visible in household photos (pantry shelves, fridge shelves, freezer contents, shopping bags, and individual product packets).
 
 Rules:
 - Only report products you can actually see.
-- Prefer specific product names when readable (e.g. "Full cream milk").
-- Extract brand and package size only when visible on packaging.
+- Prefer specific product names when readable (e.g. "Full cream milk", "Mingle Satay Recipe Base").
+- Extract brand and package size only when visible on packaging (e.g. packageSize "30g").
 - Extract expiry/best-before dates ONLY when clearly readable as printed dates. Never invent or estimate expiry dates. If unsure, set expiresOn to null.
 - Suggest location as one of: pantry, fridge, freezer based on context/packaging.
-- quantity/unit: count visible packages when clear; otherwise quantity 1 with a sensible unit from: g, kg, ml, L, pieces, packets, bottles, cans.
+- quantity/unit: count visible packages/sachets/bottles when clear; otherwise quantity 1 with a sensible unit from: g, kg, ml, L, pieces, packets, bottles, cans.
+- CRITICAL for recipe bases, seasoning sachets, meal kits and cooking/simmer sauces sold as a meal flavour packet (e.g. Mingle recipe bases): set unit to "packets" and quantity to the number of sachets/packets visible (usually 1). Put the net weight in packageSize (e.g. "30g"), NEVER as quantity in grams.
+- Ordinary bulk foods (flour, rice, mince) may use g/kg/ml/L as the stocked amount.
 - Mark needsReview true and confidence "low" or "medium" when uncertain. Do not invent brands or sizes.
 - Return JSON only: { "items": [ ... ] }`;
 
@@ -155,7 +158,7 @@ export async function analyzeGroceryImages(params: {
   }
 
   return {
-    candidates: mapVisionItems(parsed.items ?? []),
+    candidates: normalizeCaptureCandidates(mapVisionItems(parsed.items ?? [])),
     model: MODEL,
   };
 }

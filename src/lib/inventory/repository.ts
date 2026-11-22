@@ -50,6 +50,7 @@ export type UpdateInventoryItemInput = {
   locationType: LocationType;
   expiresOn?: string | null;
   notes?: string | null;
+  catalogProductId?: string | null;
 };
 
 export type ConsumeInventoryItemInput = {
@@ -190,7 +191,10 @@ export class SampleInventoryRepository implements InventoryRepository {
       unit: input.unit,
       expiresOn: input.expiresOn ?? null,
       notes: input.notes ?? null,
-      catalogProductId: existing.catalogProductId,
+      catalogProductId:
+        input.catalogProductId !== undefined
+          ? input.catalogProductId
+          : existing.catalogProductId,
       updatedAt: now,
     };
 

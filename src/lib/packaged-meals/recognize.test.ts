@@ -12,6 +12,22 @@ describe("recognizePackagedMealProduct", () => {
     assert.notEqual(result.confidence, "low");
   });
 
+  it("flags Mingle Satay Recipe Base as a recipe base", () => {
+    const result = recognizePackagedMealProduct({
+      name: "Satay Recipe Base",
+      brand: "Mingle",
+    });
+    assert.equal(result.suggestedKind, "recipe_base");
+  });
+
+  it("flags simmer sauces as cooking sauce", () => {
+    const result = recognizePackagedMealProduct({
+      name: "Butter Chicken Simmer Sauce",
+      brand: "Passage Foods",
+    });
+    assert.equal(result.suggestedKind, "cooking_sauce");
+  });
+
   it("flags taco kits as meal kits", () => {
     const result = recognizePackagedMealProduct({
       name: "Old El Paso Soft Taco Kit",

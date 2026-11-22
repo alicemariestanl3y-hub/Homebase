@@ -18,9 +18,13 @@ export async function POST(request: Request, { params }: Params) {
     const body = (await request.json()) as { productKind?: ProductKind };
     if (
       !body.productKind ||
-      !["standard", "recipe_base", "meal_kit", "unclassified"].includes(
-        body.productKind,
-      )
+      ![
+        "standard",
+        "recipe_base",
+        "meal_kit",
+        "cooking_sauce",
+        "unclassified",
+      ].includes(body.productKind)
     ) {
       return NextResponse.json(
         { error: "Choose a valid product classification." },

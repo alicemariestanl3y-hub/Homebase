@@ -181,7 +181,8 @@ export function buildMealRecommendations(input: {
     if (!recipe || !product) continue;
     if (
       product.productKind !== "recipe_base" &&
-      product.productKind !== "meal_kit"
+      product.productKind !== "meal_kit" &&
+      product.productKind !== "cooking_sauce"
     ) {
       continue;
     }

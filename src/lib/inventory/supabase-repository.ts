@@ -230,6 +230,9 @@ export class SupabaseInventoryRepository implements InventoryRepository {
         unit: input.unit,
         expires_on: input.expiresOn || null,
         notes: input.notes?.trim() || null,
+        ...(input.catalogProductId !== undefined
+          ? { catalog_product_id: input.catalogProductId }
+          : {}),
       })
       .eq("id", input.itemId)
       .eq("household_id", input.householdId)

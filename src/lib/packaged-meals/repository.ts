@@ -288,7 +288,30 @@ export async function linkInventoryItemToCatalog(
   itemId: string,
   catalogProductId: string,
 ): Promise<void> {
-  if (!isSupabaseConfigured()) return;
+  if (!isSupabaseConfigured()) {
+    const { getInventoryRepository } = await import(
+      "@/lib/inventory/get-repository"
+    );
+    const repo = getInventoryRepository();
+    const snapshot = await repo.getSnapshot(householdId);
+    const existing = snapshot?.items.find((row) => row.id === itemId);
+    if (!existing) throw new Error("Inventory item not found.");
+    const location = snapshot?.locations.find(
+      (row) => row.id === existing.locationId,
+    );
+    await repo.updateItem({
+      householdId,
+      itemId,
+      name: existing.name,
+      quantity: existing.quantity,
+      unit: existing.unit,
+      locationType: location?.type ?? "pantry",
+      expiresOn: existing.expiresOn,
+      notes: existing.notes,
+      catalogProductId,
+    });
+    return;
+  }
   const supabase = await createClient();
   const { error } = await supabase
     .from("inventory_items")
@@ -378,6 +401,13 @@ export async function createVerifiedPackagedMeal(
 
   const recipeType =
     product.productKind === "meal_kit" ? "meal_kit" : "recipe_base";
+  // Keep cooking_sauce distinct on the catalog product; meals library uses recipe_base.
+  const confirmedCatalogKind =
+    product.productKind === "cooking_sauce" ||
+    product.productKind === "meal_kit" ||
+    product.productKind === "recipe_base"
+      ? product.productKind
+      : recipeType;
 
   const recipe = await createRecipe(input.householdId, {
     title: input.title.trim(),
@@ -410,7 +440,7 @@ export async function createVerifiedPackagedMeal(
   if (!isSupabaseConfigured()) {
     const updatedProduct: CatalogProduct = {
       ...product,
-      productKind: recipeType,
+      productKind: confirmedCatalogKind,
       kindConfirmed: true,
       allergenStatus,
       allergens,
@@ -455,7 +485,7 @@ export async function createVerifiedPackagedMeal(
   await supabase
     .from("catalog_products")
     .update({
-      product_kind: recipeType,
+      product_kind: confirmedCatalogKind,
       kind_confirmed: true,
       allergen_status: allergenStatus,
       allergens,

@@ -25,7 +25,9 @@ export function CatalogClassifyPanel() {
           !row.kindConfirmed &&
           (row.kindSuggested === "recipe_base" ||
             row.kindSuggested === "meal_kit" ||
-            row.productKind === "unclassified"),
+            row.kindSuggested === "cooking_sauce" ||
+            row.productKind === "unclassified" ||
+            row.productKind === "cooking_sauce"),
       ),
     );
   }
@@ -92,14 +94,24 @@ export function CatalogClassifyPanel() {
                 type="button"
                 className="hb-btn hb-btn--ghost"
                 disabled={pending}
+                onClick={() => classify(product.id, "cooking_sauce")}
+              >
+                Cooking sauce
+              </button>
+              <button
+                type="button"
+                className="hb-btn hb-btn--ghost"
+                disabled={pending}
                 onClick={() => classify(product.id, "standard")}
               >
                 Just a pantry item
               </button>
               {(product.productKind === "recipe_base" ||
                 product.productKind === "meal_kit" ||
+                product.productKind === "cooking_sauce" ||
                 product.kindSuggested === "recipe_base" ||
-                product.kindSuggested === "meal_kit") && (
+                product.kindSuggested === "meal_kit" ||
+                product.kindSuggested === "cooking_sauce") && (
                 <Link
                   href={`/meals/packet/new?productId=${product.id}`}
                   className="hb-text-link"
